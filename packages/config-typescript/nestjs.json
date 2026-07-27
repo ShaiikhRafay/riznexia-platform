@@ -7,7 +7,11 @@
     "lib": ["ES2022"],
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "outDir": "./dist",
     "incremental": true
   }
+  // NOTE: outDir is deliberately NOT set here. TypeScript resolves relative
+  // `extends`-inherited paths against the base config file's own directory,
+  // not the consuming project's — so a shared "./dist" here would silently
+  // build into packages/config-typescript/dist instead of the app's own
+  // dist folder. Each consuming tsconfig.json must set its own outDir.
 }

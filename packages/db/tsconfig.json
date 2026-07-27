@@ -1,8 +1,13 @@
 {
   "extends": "@riznexia/config-typescript/base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src"
+    // Override base.json's ESNext/Bundler settings: this package is
+    // require()'d by apps/api's plain Node runtime (dist/main.js), not
+    // consumed through a bundler, so it must compile to CommonJS —
+    // otherwise Node's ESM auto-detection kicks in and extensionless
+    // relative imports (`./client`) fail to resolve at runtime.
+    "module": "CommonJS",
+    "moduleResolution": "Node"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "prisma/**/*.ts"]
 }

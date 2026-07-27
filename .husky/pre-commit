@@ -1,1 +1,9 @@
 pnpm lint-staged
+
+# ESLint runs per-package (via each package's own "lint" script/cwd), not
+# through lint-staged directly: ESLint 9's flat config resolves ONE config
+# file for the whole invocation directory rather than searching upward
+# per-file the way the old .eslintrc system did, so invoking `eslint` on a
+# mixed set of staged file paths from the repo root can't find the right
+# config. Turborepo's cache makes this fast on repeat commits.
+pnpm turbo run lint

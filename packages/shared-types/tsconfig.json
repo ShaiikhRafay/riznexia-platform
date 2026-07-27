@@ -1,6 +1,11 @@
 {
   "extends": "@riznexia/config-typescript/base.json",
   "compilerOptions": {
+    // Same reasoning as packages/db/tsconfig.json: this package is
+    // require()'d by apps/api's plain Node runtime, so it must compile to
+    // CommonJS, not inherit base.json's ESNext/Bundler settings.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "./dist",
     "rootDir": "./src"
   },

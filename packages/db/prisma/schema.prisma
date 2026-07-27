@@ -1,0 +1,338 @@
+// Prisma schema — see docs/18-database-architecture.md for full design rationale
+// (relationships, cascade behavior, indexes, soft-delete pattern, audit log).
+// Future/Post-MVP models are intentionally commented out at the bottom (§10).
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------- Enums ----------
+
+enum TeamRole {
+  ADMIN
+  MANAGER
+  SALES_REP
+}
+
+enum WebsiteStatusType {
+  NONE
+  OUTDATED
+  PRESENT
+}
+
+enum PipelineStage {
+  NEW
+  QUALIFIED
+  CONTACTED
+  IN_DISCUSSION
+  WON
+  LOST
+}
+
+enum WebsiteGenStatus {
+  DRAFT
+  GENERATING
+  READY_FOR_REVIEW
+  DEPLOYED
+  FAILED
+}
+
+enum GenerationStage {
+  ANALYSIS
+  BRAND
+  CONTENT
+  IMAGE
+  SEO
+  BUILD
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ProposalStatus {
+  DRAFT
+  EDITED
+  SENT_MANUALLY
+}
+
+enum DiscoveryJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ---------- Active Models ----------
+
+model TeamMember {
+  id          String    @id @default(uuid())
+  clerkUserId String    @unique @map("clerk_user_id")
+  name        String
+  email       String    @unique
+  role        TeamRole  @default(SALES_REP)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  discoveryJobs DiscoveryJob[]
+  assignedLeads Lead[]         @relation("AssignedLeads")
+  auditLogs     AuditLog[]
+
+  @@index([deletedAt])
+  @@map("team_members")
+}
+
+model DiscoveryJob {
+  id           String             @id @default(uuid())
+  createdById  String?            @map("created_by")
+  createdBy    TeamMember?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  city         String
+  category     String
+  status       DiscoveryJobStatus @default(QUEUED)
+  resultsCount Int                @default(0) @map("results_count")
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  leads Lead[]
+
+  @@index([createdById])
+  @@map("discovery_jobs")
+}
+
+model Lead {
+  id             String            @id @default(uuid())
+  googlePlaceId  String            @unique @map("google_place_id")
+  businessName   String            @map("business_name")
+  category       String
+  city           String
+  address        String
+  placesData     Json              @map("places_data")
+  websiteStatus  WebsiteStatusType @default(NONE) @map("website_status")
+  pipelineStage  PipelineStage     @default(NEW) @map("pipeline_stage")
+  assignedToId   String?           @map("assigned_to")
+  assignedTo     TeamMember?       @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  discoveryJobId String?           @map("discovery_job_id")
+  discoveryJob   DiscoveryJob?     @relation(fields: [discoveryJobId], references: [id], onDelete: SetNull)
+  notes          String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  businessAnalyses BusinessAnalysis[]
+  websites         Website[]
+  proposals        SalesProposal[]
+
+  @@index([pipelineStage])
+  @@index([assignedToId])
+  @@index([deletedAt])
+  @@map("leads")
+}
+
+model BusinessAnalysis {
+  id               String   @id @default(uuid())
+  leadId           String   @map("lead_id")
+  lead             Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  brandBrief       Json     @map("brand_brief")
+  sentimentSummary Json?    @map("sentiment_summary")
+  aiModelUsed      String   @map("ai_model_used")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt])
+  @@map("business_analyses")
+}
+
+model Website {
+  id          String           @id @default(uuid())
+  leadId      String           @map("lead_id")
+  lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status      WebsiteGenStatus @default(DRAFT)
+  templateKey String           @map("template_key")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
+
+  brandKit       BrandKit?
+  pages          WebsitePage[]
+  generationJobs GenerationJob[]
+  deployments    Deployment[]
+
+  @@index([leadId])
+  @@index([deletedAt])
+  @@map("websites")
+}
+
+model BrandKit {
+  id           String   @id @default(uuid())
+  websiteId    String   @unique @map("website_id")
+  website      Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  palette      Json
+  typography   Json
+  logoAssetUrl String?  @map("logo_asset_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("brand_kits")
+}
+
+model WebsitePage {
+  id                 String   @id @default(uuid())
+  websiteId          String   @map("website_id")
+  website            Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  slug               String
+  title              String
+  contentBlocks      Json     @map("content_blocks")
+  seoMetaTitle       String?  @map("seo_meta_title")
+  seoMetaDescription String?  @map("seo_meta_description")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([websiteId, slug])
+  @@map("website_pages")
+}
+
+model GenerationJob {
+  id              String          @id @default(uuid())
+  websiteId       String          @map("website_id")
+  website         Website         @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  stage           GenerationStage
+  status          JobStatus       @default(QUEUED)
+  aiUsageMetadata Json?           @map("ai_usage_metadata")
+  errorMessage    String?         @map("error_message")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([websiteId, stage])
+  @@map("generation_jobs")
+}
+
+model Deployment {
+  id              String    @id @default(uuid())
+  websiteId       String    @map("website_id")
+  website         Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  githubRepoUrl   String?   @map("github_repo_url")
+  vercelProjectId String?   @map("vercel_project_id")
+  liveUrl         String?   @map("live_url")
+  status          JobStatus @default(QUEUED)
+  deployedAt      DateTime? @map("deployed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([websiteId, deployedAt])
+  @@map("deployments")
+}
+
+model SalesProposal {
+  id           String         @id @default(uuid())
+  leadId       String         @map("lead_id")
+  lead         Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  draftContent String         @map("draft_content")
+  status       ProposalStatus @default(DRAFT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@index([leadId])
+  @@map("sales_proposals")
+}
+
+model CostEvent {
+  id        String   @id @default(uuid())
+  eventType String   @map("event_type")
+  metadata  Json?
+  costUsd   Decimal  @map("cost_usd") @db.Decimal(10, 4)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([eventType, createdAt])
+  @@map("cost_events")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  actorId    String?     @map("actor_id")
+  actor      TeamMember? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  metadata   Json?
+  ipAddress  String?     @map("ip_address")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// FUTURE (INACTIVE) — Post-MVP models. Intentionally commented
+// out: captured in version control as approved design intent,
+// but NOT part of the active migration set. Uncomment + run a
+// migration only when the corresponding feature is greenlit.
+// See docs/16-system-architecture.md §20 (Future Expansion Plan)
+// and docs/18-database-architecture.md §10 for rationale per table.
+// ============================================================
+
+// model Agency {
+//   id        String   @id @default(uuid())
+//   name      String
+//   slug      String   @unique
+//   createdAt DateTime @default(now()) @map("created_at")
+//
+//   @@map("agencies")
+// }
+
+// model Subscription {
+//   id                    String   @id @default(uuid())
+//   agencyId              String   @map("agency_id")
+//   stripeSubscriptionId  String   @unique @map("stripe_subscription_id")
+//   planKey               String   @map("plan_key")
+//   status                String
+//   currentPeriodEnd      DateTime @map("current_period_end")
+//
+//   @@map("subscriptions")
+// }
+
+// model ClientPortalUser {
+//   id           String   @id @default(uuid())
+//   leadId       String   @map("lead_id")
+//   email        String   @unique
+//   clerkUserId  String?  @unique @map("clerk_user_id")
+//   createdAt    DateTime @default(now()) @map("created_at")
+//
+//   @@map("client_portal_users")
+// }
+
+// model LeadScore {
+//   id           String   @id @default(uuid())
+//   leadId       String   @map("lead_id")
+//   score        Float
+//   modelVersion String   @map("model_version")
+//   computedAt   DateTime @default(now()) @map("computed_at")
+//
+//   @@index([leadId, computedAt])
+//   @@map("lead_scores")
+// }
+
+// model WebhookSubscription {
+//   id         String   @id @default(uuid())
+//   url        String
+//   eventTypes String[] @map("event_types")
+//   secret     String
+//   active     Boolean  @default(false)
+//   createdAt  DateTime @default(now()) @map("created_at")
+//
+//   @@map("webhook_subscriptions")
+// }
+
+// model DemoFeedback {
+//   id         String   @id @default(uuid())
+//   websiteId  String   @map("website_id")
+//   rating     Int
+//   comment    String?
+//   createdAt  DateTime @default(now()) @map("created_at")
+//
+//   @@map("demo_feedback")
+// }
