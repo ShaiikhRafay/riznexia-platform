@@ -1,0 +1,29 @@
+# Multi-stage build for apps/api (NestJS), run from the monorepo root:
+#   docker build -f apps/api/Dockerfile -t riznexia-api .
+
+FROM node:22-alpine AS base
+RUN corepack enable
+WORKDIR /repo
+
+# ---- deps: install full workspace deps (needed for turbo's dependency graph) ----
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages ./packages
+RUN pnpm install --frozen-lockfile
+
+# ---- build: compile apps/api and its workspace dependencies ----
+FROM base AS build
+COPY --from=deps /repo ./
+COPY . .
+RUN pnpm turbo run build --filter=@riznexia/api...
+
+# ---- runtime: minimal image, production deps only ----
+FROM base AS runtime
+ENV NODE_ENV=production
+WORKDIR /repo
+COPY --from=build /repo/apps/api/dist ./apps/api/dist
+COPY --from=build /repo/apps/api/package.json ./apps/api/package.json
+COPY --from=build /repo/node_modules ./node_modules
+EXPOSE 3001
+CMD ["node", "apps/api/dist/main.js"]

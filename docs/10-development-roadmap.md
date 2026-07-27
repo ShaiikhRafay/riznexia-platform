@@ -1,0 +1,78 @@
+# Development Roadmap — Riznexia AI Sales Platform
+
+**Status:** Draft (revised — 8-phase master structure)
+**Last updated:** 2026-07-27
+
+> **Structure note:** Roadmap reorganized around the founder-approved 8-phase master sequence. Each phase's internal breakdown from the prior draft is nested below as sub-steps.
+
+## Master Phase Sequence
+
+```
+Phase 1 → Documentation
+Phase 2 → System Design
+Phase 3 → UI/UX
+Phase 4 → Backend
+Phase 5 → Frontend
+Phase 6 → AI Agents
+Phase 7 → Deployment
+Phase 8 → Production
+```
+
+Each phase ends with an explicit stop for founder approval before the next begins (per project ground rules).
+
+## Phase 1 — Documentation ✅ Complete
+All 15 foundational documents (Product Vision through Security Strategy), revised for the internal-tool scope. No application code.
+
+## Phase 2 — System Design ✅ Complete
+Deep design delivered in [16-system-architecture.md](16-system-architecture.md) (Principal Architect pass: high/low-level architecture, service boundaries, all infra layers, design patterns, scalability, and a Post-MVP expansion plan) on top of Phase 1's Technical Architecture, Database Design, and API Specifications docs. Both prior open items resolved:
+- Internal API cost ceiling set at $300/month starting policy (Technical Architecture §10).
+- Lead visibility confirmed org-wide (Technical Architecture §5, §10).
+
+Actual infra provisioning (Neon, Railway, Vercel, Clerk, Trigger.dev, GitHub org) happens at the start of Phase 4 (Backend), not as a standalone step — no value in provisioning empty infrastructure ahead of the code that uses it.
+
+## Phase 3 — UI/UX
+- Wireframes/mockups for the key screens defined in UI/UX Design System §5 (Dashboard Home, Discovery, Leads/Pipeline, Generation Review, Deployment Status, Proposals, Team, Cost).
+- Design token finalization (final brand color, typography choice — currently placeholder).
+- Component inventory for `packages/ui` before implementation begins.
+
+## Phase 4 — Backend
+- Monorepo scaffolding (Turborepo/pnpm), NestJS API skeleton.
+- `packages/db` migrations against Neon.
+- Clerk integration: employee login, `team_member` table, role guard middleware.
+- Feature modules: `discovery`, `leads`, `generation`, `deployment`, `pitch`, `team`.
+- `AiService` gateway (`packages/ai`) scaffolding (implementation detail lands in Phase 6).
+- Google Places integration, no-website/outdated detection heuristic.
+
+## Phase 5 — Frontend
+- Next.js dashboard implementation consuming the Phase 4 API.
+- All screens from Phase 3 UI/UX built out against real endpoints.
+- Live status/progress UI for async discovery/generation/deployment jobs.
+
+## Phase 6 — AI Agents
+- Business Analysis, Brand Strategist, Content Generator, SEO Strategist, Pitch Drafting agents (AI Agent Architecture §2).
+- Prompt template versioning (`packages/ai/prompts`), output validation/guardrails.
+- Category site templates (`apps/site-template`), starting with 1–2 categories.
+- Cost governance enforcement (per-rep/global spend ceilings).
+
+## Phase 7 — Deployment
+- GitHub + Vercel automation for demo site deployment (Technical Architecture §6).
+- Platform CI/CD pipeline (Deployment Strategy) — preview/staging/production environments.
+- Webhook ingestion (`/webhooks/vercel`, `/webhooks/clerk`).
+
+## Phase 8 — Production
+- Role-authorization and cost-governance test pass (Security Strategy, Testing Strategy).
+- Load/cost testing at realistic internal sales-team volume.
+- Internal rollout: enable the tool for the Riznexia sales team, monitoring in place.
+
+## Suggested Staffing Split (2–5 engineers)
+- **Track A (Platform/Backend):** Phases 2, 4, 7.
+- **Track B (AI/Generation):** Phase 6 (can start once Phase 4's `AiService` scaffolding lands).
+- **Track C (Frontend):** Phase 3, 5.
+
+A team of 2 works these phases largely sequentially; a team of 4–5 can parallelize Backend/AI/Frontend from Phase 4 onward.
+
+## Milestone Definition of Done
+Each phase is done when its deliverables are complete **and** approved by the founder before the next phase begins — no phase starts on assumed approval.
+
+---
+**Phases 1–2 complete. Proceeding to Phase 3 (UI/UX) pending approval.**

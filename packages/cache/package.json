@@ -1,0 +1,24 @@
+{
+  "name": "@riznexia/cache",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Upstash Redis client wrapper — rate limiting, cost-quota counters, discovery caching (Doc 16 §10).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  },
+  "devDependencies": {
+    "@riznexia/config-eslint": "workspace:*",
+    "@riznexia/config-typescript": "workspace:*",
+    "eslint": "^9.11.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,36 @@
+# Local development services only. Staging/production use Neon (Postgres) and
+# Upstash (Redis) as managed services (Doc 04, Doc 16) — this compose file exists
+# so a developer can run the full stack locally without cloud accounts on Day 1,
+# per Doc 14 (Deployment Strategy) §2: "Local | local Postgres or Neon dev branch".
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: riznexia
+      POSTGRES_PASSWORD: riznexia_dev
+      POSTGRES_DB: riznexia_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - riznexia_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U riznexia"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  riznexia_postgres_data:

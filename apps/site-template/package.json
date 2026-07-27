@@ -1,0 +1,6 @@
+{
+  "name": "@riznexia/site-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scaffold used by the generation pipeline to produce each demo site's codebase — Doc 05, Doc 16 §6."
+}
