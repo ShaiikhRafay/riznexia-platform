@@ -35,3 +35,20 @@ export class InvalidWebhookSignatureException extends AppException {
     super('INVALID_WEBHOOK_SIGNATURE', message, HttpStatus.UNAUTHORIZED);
   }
 }
+
+// Doc 19 §4 — a third-party API call failed after retries (or failed with
+// a non-retryable provider error). Reused across every external adapter
+// (Places today; GitHub/Vercel/image-gen later), not just this module's.
+export class UpstreamProviderException extends AppException {
+  constructor(provider: string, message: string, details?: Record<string, unknown>) {
+    super('UPSTREAM_PROVIDER_ERROR', `${provider}: ${message}`, HttpStatus.BAD_GATEWAY, details);
+  }
+}
+
+// Doc 19 §4 — per-rep or org-wide cost/usage ceiling reached (Doc 04 §10,
+// BRD BR-7).
+export class QuotaExceededException extends AppException {
+  constructor(message = 'Monthly cost ceiling reached') {
+    super('QUOTA_EXCEEDED', message, HttpStatus.TOO_MANY_REQUESTS);
+  }
+}

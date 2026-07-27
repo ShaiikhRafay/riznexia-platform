@@ -1,6 +1,9 @@
 {
   "extends": "@riznexia/config-typescript/base.json",
   "compilerOptions": {
+    // require()'d by apps/api's plain Node runtime — see DECISIONS.md D-002.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "./dist",
     "rootDir": "./src"
   },

@@ -12,11 +12,11 @@ services:
       POSTGRES_PASSWORD: riznexia_dev
       POSTGRES_DB: riznexia_dev
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - riznexia_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U riznexia"]
+      test: ['CMD-SHELL', 'pg_isready -U riznexia']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,12 +25,31 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # @upstash/redis speaks Upstash's HTTP REST protocol, not the standard
+  # Redis wire protocol the `redis` service above exposes — this proxy
+  # bridges the two so packages/cache works locally without a real Upstash
+  # account. See DECISIONS.md D-006. Point UPSTASH_REDIS_REST_URL at
+  # http://localhost:8079 and UPSTASH_REDIS_REST_TOKEN at any non-empty
+  # value locally (SRH doesn't check it unless configured to).
+  redis-http-proxy:
+    image: hiett/serverless-redis-http:latest
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - '8079:80'
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: dev-token
+      SRH_CONNECTION_STRING: 'redis://redis:6379'
 
 volumes:
   riznexia_postgres_data:
