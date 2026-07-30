@@ -1,23 +1,26 @@
 # Security Strategy — Riznexia AI Sales Platform
 
 **Status:** Draft (revised — internal-tool scope)
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope change note:** "Multi-Tenant Data Isolation" section replaced with "Role-Based Access Control" (no tenants). All billing/PCI content removed (no billing exists). Added explicit note restricting sign-up to Riznexia's own domain.
+>
+> **Doc-sync note (2026-07-29):** §1–§2 updated for Module M3's implemented RBAC: six roles (not three), a role hierarchy, and a fine-grained permission matrix — Clerk's authentication scope is unchanged (this was already correct and remains the architecture, confirmed rather than revised when M3's brief initially proposed replacing it — DECISIONS.md D-023). §8's audit-logging claim corrected to match what's actually built. See DECISIONS.md D-029.
 
 ## 1. Authentication & Authorization
 
-- **AuthN:** Clerk handles all employee authentication, restricted to Riznexia's email domain — **invite-only, no public sign-up**. No custom password handling anywhere in our code.
-- **AuthZ:** Role-based (`admin`, `manager`, `sales_rep` — Database Design §3 `team_member.role`). A global NestJS guard resolves `{ teamMemberId, role }` from the validated Clerk JWT on every request; endpoint-level decorators declare required roles where relevant (e.g., only Admin/Manager can manage team accounts or view the cost dashboard).
+- **AuthN:** Clerk handles all employee authentication, restricted to Riznexia's email domain — **invite-only, no public sign-up**. No custom password handling anywhere in our code. This stays the architecture as of Module M3: a brief proposing a self-rolled JWT/refresh-token/password system was explicitly declined in favor of keeping Clerk (DECISIONS.md D-023) — Module M3 built authorization only, not a parallel credential system.
+- **AuthZ:** Role- and permission-based (`super_admin`, `admin`, `sales_manager`, `developer`, `sales_executive`, `viewer` — Database Design §3 `team_member.role`, Module M3). A global NestJS guard chain resolves `{ teamMemberId, role }` from the validated Clerk JWT on every request, then applies three independent checks in sequence: an exact-role-list check, a role-hierarchy ("at least this seniority") check, and a fine-grained permission check (System Architecture §15). E.g., only Super Admin/Admin/Sales Manager hold the `team:manage`/`cost:view` permissions needed to manage team accounts or view the cost dashboard.
 - Service-to-service calls (Trigger.dev tasks calling back into the API) use a separate, narrowly-scoped internal service credential — never the end-user's JWT.
 
 ## 2. Role-Based Access Control (replaces multi-tenancy)
 
-There is no tenant boundary in this system — all data belongs to Riznexia. The security-relevant boundary is **role**, not tenant:
+There is no tenant boundary in this system — all data belongs to Riznexia. The security-relevant boundary is **role and permission**, not tenant:
 
-- Enforced at the application layer via a global guard + per-endpoint role decorators (Coding Standards §2).
-- Explicitly tested: a Sales Rep attempting an Admin/Manager-only action (team management, cost dashboard, role changes) must fail (Testing Strategy §4).
-- Lead visibility is org-wide by default (any authenticated employee can see any lead) — this is a deliberate simplification appropriate for a small internal sales team, revisited only if Riznexia's sales org structure later requires stricter partitioning (Technical Architecture §10).
+- Enforced at the application layer via a global guard chain + per-endpoint decorators (`@Roles()`, `@MinRole()`, `@RequirePermissions()` — Coding Standards §2, Module M3).
+- Explicitly tested: a role lacking the required permission or hierarchy level for a gated action must fail with `403 FORBIDDEN` (Testing Strategy §4; `apps/api/test/rbac.e2e-spec.ts` proves the full guard chain end-to-end).
+- Lead visibility is org-wide by default (any authenticated employee with `leads:read`, which every role currently holds, can see any lead) — this is a deliberate simplification appropriate for a small internal sales team, revisited only if Riznexia's sales org structure later requires stricter partitioning (Technical Architecture §10).
+- **Organization/multi-tenant readiness:** the schema has a documented, currently-inactive attachment point (`Organization`, commented out) for if this is ever revisited — not built, not a current requirement (Database Architecture §10, DECISIONS.md D-027).
 
 ## 3. Secrets Management
 
@@ -50,22 +53,23 @@ There is no tenant boundary in this system — all data belongs to Riznexia. The
 
 ## 8. OWASP Top 10 — Applied Posture
 
-| Risk | Mitigation |
-|---|---|
-| Broken access control | Role-based authorization by construction (§2) |
-| Injection | Parameterized queries, schema-validated input, structured AI prompts (§4) |
-| Cryptographic failures | TLS everywhere (Vercel/Railway default), encrypted secrets, no custom crypto |
-| Insecure design | Human-review gates and cost governance designed in from Doc 1 onward |
-| Security misconfiguration | Infra-as-config via managed platforms, secret scanning in CI, no manual server hardening surface |
-| Vulnerable/outdated components | Automated dependency update PRs (Dependabot/Renovate) reviewed under normal PR process |
-| Auth/identity failures | Delegated to Clerk, domain-restricted invite-only sign-up |
-| Software/data integrity failures | CI-gated deploys only, signed webhook verification, no unsigned third-party code execution |
-| Logging/monitoring failures | Trigger.dev pipeline observability + deployment alerts; security-relevant events (auth failures, role-check denials) logged distinctly |
-| SSRF | External calls restricted to explicit, allow-listed provider integrations (§6) — no user-controllable arbitrary outbound URL fetching |
+| Risk                             | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Broken access control            | Role-based authorization by construction (§2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Injection                        | Parameterized queries, schema-validated input, structured AI prompts (§4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Cryptographic failures           | TLS everywhere (Vercel/Railway default), encrypted secrets, no custom crypto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Insecure design                  | Human-review gates and cost governance designed in from Doc 1 onward                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Security misconfiguration        | Infra-as-config via managed platforms, secret scanning in CI, no manual server hardening surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Vulnerable/outdated components   | Automated dependency update PRs (Dependabot/Renovate) reviewed under normal PR process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Auth/identity failures           | Delegated to Clerk, domain-restricted invite-only sign-up                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Software/data integrity failures | CI-gated deploys only, signed webhook verification, no unsigned third-party code execution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Logging/monitoring failures      | Trigger.dev pipeline observability + deployment alerts; privileged actions are recorded to the append-only `audit_log` table on success via an opt-in `@Audited()` decorator (Module M3, Database Architecture §6). Auth/permission-check _denials_ are not yet separately audit-logged — they currently surface only as standard `401`/`403` responses (and whatever the hosting platform's access logs capture), not as a queryable `audit_log` row. Closing that gap is a candidate for the Observability & Hardening backlog item (docs/21-implementation-roadmap.md §5), not silently claimed as already done. |
+| SSRF                             | External calls restricted to explicit, allow-listed provider integrations (§6) — no user-controllable arbitrary outbound URL fetching                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## 9. Compliance Posture
 
 No regulated data classes (health records, payment card data) are processed by this system — there is no billing surface and no card data ever touches it. This is an internal operational tool; formal external compliance certification is not applicable at this scope.
 
 ---
+
 **All 15 documents are now revised for the internal-tool scope.**

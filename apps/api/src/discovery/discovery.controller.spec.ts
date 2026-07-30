@@ -4,7 +4,7 @@ import type { DiscoveryService } from './discovery.service';
 describe('DiscoveryController', () => {
   let discoveryService: { createJobs: jest.Mock; findMany: jest.Mock; findById: jest.Mock };
   let controller: DiscoveryController;
-  const user = { id: 'rep-1', clerkUserId: 'user_1', role: 'sales_rep' as const };
+  const user = { id: 'rep-1', clerkUserId: 'user_1', role: 'sales_executive' as const };
 
   beforeEach(() => {
     discoveryService = { createJobs: jest.fn(), findMany: jest.fn(), findById: jest.fn() };

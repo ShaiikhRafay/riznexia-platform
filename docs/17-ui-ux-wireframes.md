@@ -2,9 +2,11 @@
 
 **Status:** Draft — Phase 3 deliverable
 **Role:** Senior Product Designer pass
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope note:** This document deepens Doc 08 into a full design system + low-fidelity wireframes for every requested screen. Wireframes are structural box diagrams (layout/hierarchy only — no color, no copy polish, no code) per the "wireframes only, no frontend code" instruction. This is an **internal dashboard** for Riznexia employees (per the approved scope pivot) — premium-SaaS visual quality, but no customer-facing surface exists anywhere in this design.
+>
+> **Doc-sync note (2026-07-29):** Role/permission gating on Team/Cost nav items and the Settings screen updated to match Module M3's implemented RBAC. None of these screens are built yet (frontend work hasn't started) — this is a wireframe-content correction, not a claim that anything changed visually. See DECISIONS.md D-029.
 
 ---
 
@@ -17,15 +19,15 @@
 
 ## 2. Typography
 
-| Token | Font | Size | Weight | Use |
-|---|---|---|---|---|
-| `text-display` | Inter | 30px / 1.2 | 600 | Page titles (rare — most screens use `text-h1`) |
-| `text-h1` | Inter | 24px / 1.3 | 600 | Screen headers |
-| `text-h2` | Inter | 18px / 1.4 | 600 | Card/section headers |
-| `text-body` | Inter | 14px / 1.5 | 400 | Default UI text |
-| `text-body-medium` | Inter | 14px / 1.5 | 500 | Emphasized labels, table headers |
-| `text-caption` | Inter | 12px / 1.4 | 400 | Metadata, timestamps, helper text |
-| `text-mono` | JetBrains Mono | 13px / 1.5 | 400 | URLs, IDs, code-like values (repo names, API costs) |
+| Token              | Font           | Size       | Weight | Use                                                 |
+| ------------------ | -------------- | ---------- | ------ | --------------------------------------------------- |
+| `text-display`     | Inter          | 30px / 1.2 | 600    | Page titles (rare — most screens use `text-h1`)     |
+| `text-h1`          | Inter          | 24px / 1.3 | 600    | Screen headers                                      |
+| `text-h2`          | Inter          | 18px / 1.4 | 600    | Card/section headers                                |
+| `text-body`        | Inter          | 14px / 1.5 | 400    | Default UI text                                     |
+| `text-body-medium` | Inter          | 14px / 1.5 | 500    | Emphasized labels, table headers                    |
+| `text-caption`     | Inter          | 12px / 1.4 | 400    | Metadata, timestamps, helper text                   |
+| `text-mono`        | JetBrains Mono | 13px / 1.5 | 400    | URLs, IDs, code-like values (repo names, API costs) |
 
 Single font family (Inter) for UI text keeps the dense, data-heavy screens calm; monospace is reserved for genuinely code-like values (deployment URLs, place IDs) so they're visually distinct from prose.
 
@@ -33,20 +35,20 @@ Single font family (Inter) for UI text keeps the dense, data-heavy screens calm;
 
 Neutral-first, one accent, semantic status colors — full light/dark pairs (dark is default given daily internal tool usage patterns skew toward it, but both are first-class, not an afterthought).
 
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `bg-canvas` | `#FFFFFF` | `#0B0D12` | App background |
-| `bg-surface` | `#F8F9FB` | `#12151C` | Cards, panels |
-| `bg-surface-raised` | `#FFFFFF` | `#1A1E27` | Modals, dropdowns |
-| `border-default` | `#E5E7EB` | `#262B36` | Dividers, card borders |
-| `text-primary` | `#111827` | `#F2F3F5` | Primary text |
-| `text-secondary` | `#6B7280` | `#9AA1AC` | Secondary/caption text |
-| `accent` | `#4F46E5` | `#6366F1` | Primary actions, active nav, links |
-| `accent-hover` | `#4338CA` | `#818CF8` | Hover state on accent elements |
-| `success` | `#16A34A` | `#4ADE80` | Deployed, completed |
-| `warning` | `#D97706` | `#FBBF24` | Needs review, quota nearing limit |
-| `danger` | `#DC2626` | `#F87171` | Failed job, over quota |
-| `info` | `#0284C7` | `#38BDF8` | In progress, informational |
+| Token               | Light     | Dark      | Use                                |
+| ------------------- | --------- | --------- | ---------------------------------- |
+| `bg-canvas`         | `#FFFFFF` | `#0B0D12` | App background                     |
+| `bg-surface`        | `#F8F9FB` | `#12151C` | Cards, panels                      |
+| `bg-surface-raised` | `#FFFFFF` | `#1A1E27` | Modals, dropdowns                  |
+| `border-default`    | `#E5E7EB` | `#262B36` | Dividers, card borders             |
+| `text-primary`      | `#111827` | `#F2F3F5` | Primary text                       |
+| `text-secondary`    | `#6B7280` | `#9AA1AC` | Secondary/caption text             |
+| `accent`            | `#4F46E5` | `#6366F1` | Primary actions, active nav, links |
+| `accent-hover`      | `#4338CA` | `#818CF8` | Hover state on accent elements     |
+| `success`           | `#16A34A` | `#4ADE80` | Deployed, completed                |
+| `warning`           | `#D97706` | `#FBBF24` | Needs review, quota nearing limit  |
+| `danger`            | `#DC2626` | `#F87171` | Failed job, over quota             |
+| `info`              | `#0284C7` | `#38BDF8` | In progress, informational         |
 
 All pairs validated at WCAG AA contrast (4.5:1 body text minimum) against their respective background — checked programmatically as part of the token file, not eyeballed (ties to §16 Accessibility).
 
@@ -70,21 +72,21 @@ Tailwind's default 4px base scale, used without a custom override:
 
 ## 6. Components (inventory + states)
 
-| Component | States | Notes |
-|---|---|---|
-| Button (primary/secondary/ghost/destructive) | default, hover, active, disabled, loading | Loading state replaces label with spinner, keeps button width fixed (no layout shift) |
-| Input / Textarea | default, focus, error, disabled | Error state shows inline message below, red border, no color-only signal (icon + text) |
-| Select / Combobox | default, open, disabled | Used for city/category pickers in Discovery |
-| Data Table | default row, hover row, selected row, empty state, loading skeleton | Core component — used on Leads, Team, Cost screens |
-| Status Badge | queued (gray), running (blue/info), completed (green/success), failed (red/danger), needs-review (amber/warning) | Same 5-state vocabulary reused everywhere a job/pipeline status appears |
-| Pipeline Stepper | pending, active, complete, failed | Used in Website Generator (§13) for stage-by-stage progress |
-| Kanban Card | default, dragging, assigned/unassigned | Leads pipeline view |
-| Drawer (side panel) | open, closed | Lead quick-view without full page navigation |
-| Modal | open, closed | Destructive confirmations, invite-team-member |
-| Toast | info, success, error | Transient system feedback (e.g., "Demo deployed") |
-| Tabs | active, inactive | Used on Lead Detail (Overview / Business Details / Website / Proposal) |
-| Tooltip | — | Icon-only affordances, truncated text |
-| Dropdown Menu | closed, open | Row actions (table overflow menu) |
+| Component                                    | States                                                                                                           | Notes                                                                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Button (primary/secondary/ghost/destructive) | default, hover, active, disabled, loading                                                                        | Loading state replaces label with spinner, keeps button width fixed (no layout shift)  |
+| Input / Textarea                             | default, focus, error, disabled                                                                                  | Error state shows inline message below, red border, no color-only signal (icon + text) |
+| Select / Combobox                            | default, open, disabled                                                                                          | Used for city/category pickers in Discovery                                            |
+| Data Table                                   | default row, hover row, selected row, empty state, loading skeleton                                              | Core component — used on Leads, Team, Cost screens                                     |
+| Status Badge                                 | queued (gray), running (blue/info), completed (green/success), failed (red/danger), needs-review (amber/warning) | Same 5-state vocabulary reused everywhere a job/pipeline status appears                |
+| Pipeline Stepper                             | pending, active, complete, failed                                                                                | Used in Website Generator (§13) for stage-by-stage progress                            |
+| Kanban Card                                  | default, dragging, assigned/unassigned                                                                           | Leads pipeline view                                                                    |
+| Drawer (side panel)                          | open, closed                                                                                                     | Lead quick-view without full page navigation                                           |
+| Modal                                        | open, closed                                                                                                     | Destructive confirmations, invite-team-member                                          |
+| Toast                                        | info, success, error                                                                                             | Transient system feedback (e.g., "Demo deployed")                                      |
+| Tabs                                         | active, inactive                                                                                                 | Used on Lead Detail (Overview / Business Details / Website / Proposal)                 |
+| Tooltip                                      | —                                                                                                                | Icon-only affordances, truncated text                                                  |
+| Dropdown Menu                                | closed, open                                                                                                     | Row actions (table overflow menu)                                                      |
 
 ## 7. Navigation
 
@@ -98,23 +100,23 @@ flowchart TB
     Sidebar --> NavHome[Dashboard]
     Sidebar --> NavDiscovery[Discovery]
     Sidebar --> NavLeads[Leads]
-    Sidebar --> NavTeam["Team (Admin/Manager only)"]
-    Sidebar --> NavCost["Cost (Admin/Manager only)"]
+    Sidebar --> NavTeam["Team (team:manage permission)"]
+    Sidebar --> NavCost["Cost (cost:view permission)"]
     Sidebar --> NavSettings[Settings]
 ```
 
 - **Top bar:** breadcrumb (contextual, e.g., `Leads / Joe's Diner / Website`), search (global lead search), user menu (profile, theme toggle, sign out).
-- **Sidebar:** collapsible to icon-only rail on smaller viewports; role-gated items (Team, Cost) simply don't render for a Sales Rep — not shown-then-disabled, to avoid implying access that doesn't exist.
+- **Sidebar:** collapsible to icon-only rail on smaller viewports; permission-gated items (Team, Cost) simply don't render for a role lacking `team:manage`/`cost:view` (e.g. Sales Executive, Developer, Viewer — Module M3) — not shown-then-disabled, to avoid implying access that doesn't exist.
 - **No breadcrumb deeper than 3 levels** — if a flow needs a 4th level, it belongs in a drawer/modal instead of a new route.
 
 ## 8. Responsive Layout
 
-| Breakpoint | Width | Sidebar | Table behavior |
-|---|---|---|---|
-| `sm` | <640px | Not primary target — internal tool, desktop-first | N/A (deprioritized, functional but not optimized) |
-| `md` | 640–1024px | Collapses to icon rail by default | Tables switch to stacked-card rows |
-| `lg` | 1024–1440px | Full sidebar, standard target | Full table, standard density |
-| `xl`+ | >1440px | Full sidebar, content max-width capped (`1440px`), centered | Full table, extra column breathing room |
+| Breakpoint | Width       | Sidebar                                                     | Table behavior                                    |
+| ---------- | ----------- | ----------------------------------------------------------- | ------------------------------------------------- |
+| `sm`       | <640px      | Not primary target — internal tool, desktop-first           | N/A (deprioritized, functional but not optimized) |
+| `md`       | 640–1024px  | Collapses to icon rail by default                           | Tables switch to stacked-card rows                |
+| `lg`       | 1024–1440px | Full sidebar, standard target                               | Full table, standard density                      |
+| `xl`+      | >1440px     | Full sidebar, content max-width capped (`1440px`), centered | Full table, extra column breathing room           |
 
 This is a **desktop-first** internal tool (reps work from a laptop/desktop during discovery/generation sessions) — mobile gets a functional, not optimized, experience. This is a deliberate scope call, flagged for confirmation below.
 
@@ -258,7 +260,7 @@ flowchart TB
         subgraph Content[" "]
             direction TB
             ProfileSection["Profile: name, email (read-only, from Clerk), theme toggle"]
-            TeamSection["Team (Admin/Manager only):\nmember list + role dropdown + invite button"]
+            TeamSection["Team (team:manage permission):\nmember list + role dropdown + invite button"]
         end
     end
     SettingsNav --> Content
@@ -296,4 +298,5 @@ flowchart TB
 **Desktop-first, mobile-functional-but-not-optimized (§8).** Given this is an internal sales tool used during active discovery/generation sessions (multi-step forms, live preview panes), I've scoped mobile as "works, not polished" rather than a fully responsive priority. Flag if reps need first-class mobile/tablet use (e.g., pitching from a tablet in front of a client) — that would change the Website Preview (§12) and Analytics (§14) layouts specifically.
 
 ---
+
 **Phase 3 (UI/UX) wireframes complete. Awaiting approval before Phase 4 (Backend).**

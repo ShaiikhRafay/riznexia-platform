@@ -73,7 +73,7 @@ describe('ClerkAuthGuard', () => {
 
   it('attaches the resolved user and allows the request through', async () => {
     clerkService.verifyToken.mockResolvedValue({ sub: 'user_1' });
-    const member = { id: 'db-id', clerkUserId: 'user_1', role: 'sales_rep' };
+    const member = { id: 'db-id', clerkUserId: 'user_1', role: 'sales_executive' };
     teamMemberService.findByClerkUserId.mockResolvedValue({ id: 'db-id' });
     teamMemberService.toRequestUser.mockReturnValue(member);
 

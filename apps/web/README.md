@@ -4,7 +4,7 @@ Next.js (App Router) internal dashboard — see [UI/UX Design](../../docs/17-ui-
 
 ## Current state
 
-Scaffolding only (Doc 21, Module M0): root layout, a placeholder home page, and the design-token CSS variables from [Doc 17 §3](../../docs/17-ui-ux-wireframes.md#3-color-palette) wired into Tailwind. No real screens, auth, or data fetching yet.
+Scaffolding only (Doc 21, pre-module Project Setup): root layout, a placeholder home page, and the design-token CSS variables from [Doc 17 §3](../../docs/17-ui-ux-wireframes.md#3-color-palette) wired into Tailwind. No real screens, auth, or data fetching yet.
 
 ## Run locally
 

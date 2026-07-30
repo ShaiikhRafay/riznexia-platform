@@ -2,11 +2,15 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UpstreamProviderException } from '../exceptions/app.exception';
 import { categoryToSearchTerm } from './category-mapping';
-import type { PlaceFullDetails, PlacePhoto, PlaceReview, PlacesCandidate } from './places.types';
+import type {
+  PlaceFullDetails,
+  PlacePhoto,
+  PlaceReview,
+  PlacesCandidate,
+  PlacesSearchPage,
+} from './places.types';
 
 const PLACES_API_BASE = 'https://places.googleapis.com/v1';
-const MAX_SEARCH_PAGES = 3; // Google's own cap: 3 pages x 20 results = 60 candidates
-const PAGE_TOKEN_DELAY_MS = 2000; // a fresh pageToken is not immediately valid
 const REQUEST_TIMEOUT_MS = 10_000;
 
 // Cheapest tier field masks first, richer ones only when justified —
@@ -19,10 +23,30 @@ const SEARCH_FIELD_MASK = [
   'places.formattedAddress',
   'places.types',
   'places.primaryType',
+  'places.location',
   'nextPageToken',
 ];
 const WEBSITE_CHECK_FIELD_MASK = ['websiteUri'];
-const FULL_DETAILS_FIELD_MASK = ['websiteUri', 'rating', 'userRatingCount', 'reviews', 'photos'];
+// Module M5 — widened to cover the Business fields this module promotes to
+// real columns: phone, coordinates, opening hours, operating status, and
+// the Google Maps listing URL (googleBusinessUrl).
+const FULL_DETAILS_FIELD_MASK = [
+  'websiteUri',
+  'rating',
+  'userRatingCount',
+  'reviews',
+  'photos',
+  'internationalPhoneNumber',
+  'location',
+  'regularOpeningHours',
+  'businessStatus',
+  'googleMapsUri',
+];
+
+interface RawLocation {
+  latitude?: number;
+  longitude?: number;
+}
 
 interface RawPlace {
   id: string;
@@ -30,6 +54,7 @@ interface RawPlace {
   formattedAddress?: string;
   types?: string[];
   primaryType?: string;
+  location?: RawLocation;
 }
 
 interface RawSearchResponse {
@@ -53,6 +78,11 @@ interface RawDetailsResponse {
   userRatingCount?: number;
   reviews?: RawReview[];
   photos?: RawPhoto[];
+  internationalPhoneNumber?: string;
+  location?: RawLocation;
+  regularOpeningHours?: unknown;
+  businessStatus?: string;
+  googleMapsUri?: string;
 }
 
 interface RawErrorResponse {
@@ -61,56 +91,81 @@ interface RawErrorResponse {
 
 // The only place in the codebase that calls Google Places API (New)
 // directly (Doc 12 §2). Implements the tiered fetch strategy from the
-// approved M1 design review (Doc 22 §9).
+// approved M1 design review (Doc 22 §9). Module M5: no longer owns
+// multi-page looping — `searchText`/`searchNearby` each fetch exactly one
+// page per call (a `pageToken` in, a `nextPageToken` out); the caller
+// (GooglePlacesProvider) owns the loop, its cap, and the inter-page delay,
+// matching the `LocationProvider.search()` one-page-per-call contract.
 @Injectable()
 export class PlacesAdapter {
   constructor(private readonly config: ConfigService) {}
 
   async searchText(params: {
     city: string;
-    category: string;
-    radiusKm: number;
-  }): Promise<PlacesCandidate[]> {
-    const textQuery = `${categoryToSearchTerm(params.category)} in ${params.city}`;
-    const candidates: PlacesCandidate[] = [];
-    let pageToken: string | undefined;
-    let pagesFetched = 0;
+    category?: string;
+    keyword?: string;
+    pageToken?: string;
+  }): Promise<PlacesSearchPage> {
+    const term = params.keyword ?? categoryToSearchTerm(params.category ?? '');
+    const textQuery = `${term} in ${params.city}`;
+    const body: { textQuery: string; pageSize: number; pageToken?: string } = {
+      textQuery,
+      pageSize: 20,
+    };
+    if (params.pageToken) {
+      body.pageToken = params.pageToken;
+    }
 
-    do {
-      const body: { textQuery: string; pageSize: number; pageToken?: string } = {
-        textQuery,
-        pageSize: 20,
+    const response = await this.request<RawSearchResponse>(
+      'POST',
+      '/places:searchText',
+      body,
+      SEARCH_FIELD_MASK,
+    );
+    return toSearchPage(response);
+  }
+
+  /** Google's coordinate-based search endpoint (Doc 21 M5 — "search by coordinates/radius"). */
+  async searchNearby(params: {
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    category?: string;
+    pageToken?: string;
+  }): Promise<PlacesSearchPage> {
+    const body: {
+      locationRestriction: {
+        circle: { center: { latitude: number; longitude: number }; radius: number };
       };
-      if (pageToken) {
-        body.pageToken = pageToken;
-      }
+      includedTypes?: string[];
+      maxResultCount: number;
+    } = {
+      locationRestriction: {
+        circle: {
+          center: { latitude: params.latitude, longitude: params.longitude },
+          radius: params.radiusMeters,
+        },
+      },
+      maxResultCount: 20,
+    };
+    if (params.category) {
+      body.includedTypes = [params.category];
+    }
 
-      const response = await this.request<RawSearchResponse>(
-        'POST',
-        '/places:searchText',
-        body,
-        SEARCH_FIELD_MASK,
-      );
+    // Google's Nearby Search (New) doesn't take a `pageToken` request field
+    // the way Text Search does — it returns at most `maxResultCount` in one
+    // response and has no continuation token. Kept as an explicit no-op
+    // parameter (rather than omitted) so the caller's page-loop can still
+    // treat this uniformly with searchText's page shape.
+    void params.pageToken;
 
-      for (const place of response.places ?? []) {
-        candidates.push({
-          placeId: place.id,
-          displayName: place.displayName?.text ?? '',
-          formattedAddress: place.formattedAddress ?? '',
-          primaryType: place.primaryType ?? null,
-          types: place.types ?? [],
-        });
-      }
-
-      pageToken = response.nextPageToken;
-      pagesFetched += 1;
-
-      if (pageToken && pagesFetched < MAX_SEARCH_PAGES) {
-        await sleep(PAGE_TOKEN_DELAY_MS);
-      }
-    } while (pageToken && pagesFetched < MAX_SEARCH_PAGES);
-
-    return candidates;
+    const response = await this.request<RawSearchResponse>(
+      'POST',
+      '/places:searchNearby',
+      body,
+      SEARCH_FIELD_MASK,
+    );
+    return toSearchPage(response);
   }
 
   /** Cheapest Details tier — used for every candidate to determine website_status. */
@@ -146,6 +201,12 @@ export class PlacesAdapter {
       userRatingCount: response.userRatingCount ?? null,
       reviews,
       photos,
+      phone: response.internationalPhoneNumber ?? null,
+      latitude: response.location?.latitude ?? null,
+      longitude: response.location?.longitude ?? null,
+      openingHours: response.regularOpeningHours ?? null,
+      businessStatus: response.businessStatus ?? null,
+      googleMapsUri: response.googleMapsUri ?? null,
     };
   }
 
@@ -194,6 +255,15 @@ export class PlacesAdapter {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function toSearchPage(response: RawSearchResponse): PlacesSearchPage {
+  const candidates: PlacesCandidate[] = (response.places ?? []).map((place) => ({
+    placeId: place.id,
+    displayName: place.displayName?.text ?? '',
+    formattedAddress: place.formattedAddress ?? '',
+    primaryType: place.primaryType ?? null,
+    types: place.types ?? [],
+    latitude: place.location?.latitude ?? null,
+    longitude: place.location?.longitude ?? null,
+  }));
+  return { candidates, nextPageToken: response.nextPageToken };
 }

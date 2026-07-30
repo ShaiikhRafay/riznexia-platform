@@ -19,9 +19,14 @@ export type DiscoveryJob = z.infer<typeof discoveryJobSchema>;
 // categories per request for rep convenience; the service fans this out
 // into one discovery_job per category (Doc 18's discovery_job.category is
 // a single column, one row per city+category pair) — see DECISIONS.md.
+//
+// .trim() before .min(1): a plain .min(1) checks raw string length, so a
+// single space (" ") would pass validation and still trigger a real,
+// wasted Places API call (audit finding #5) — trimming first makes the
+// length check actually mean "has content."
 export const createDiscoveryJobSchema = z.object({
-  city: z.string().min(1).max(100),
-  categories: z.array(z.string().min(1).max(50)).min(1).max(5),
+  city: z.string().trim().min(1).max(100),
+  categories: z.array(z.string().trim().min(1).max(50)).min(1).max(5),
   radiusKm: z.number().positive().max(50).default(15),
 });
 export type CreateDiscoveryJobInput = z.infer<typeof createDiscoveryJobSchema>;

@@ -31,8 +31,25 @@ describe('Discovery + Leads (e2e)', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
-    lead: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() },
+    business: { findUnique: jest.fn(), upsert: jest.fn() },
+    lead: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    leadNote: { create: jest.fn(), findMany: jest.fn() },
+    leadActivity: { create: jest.fn(), findMany: jest.fn() },
     costEvent: { create: jest.fn() },
+    // Module M4 uses the callback form ($transaction(async (tx) => ...)),
+    // Module M1's DiscoveryService still uses the array form
+    // ($transaction([...])) — support both rather than assuming one.
+    $transaction: jest.fn((arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: unknown) => unknown)(prismaMock)
+        : Promise.all(arg as Promise<unknown>[]),
+    ),
   };
   const cacheMock = {
     getJson: jest.fn().mockResolvedValue(null),
@@ -46,7 +63,8 @@ describe('Discovery + Leads (e2e)', () => {
   };
   const clerkServiceMock = { verifyToken: jest.fn() };
   const placesAdapterMock = {
-    searchText: jest.fn().mockResolvedValue([]),
+    searchText: jest.fn().mockResolvedValue({ candidates: [], nextPageToken: undefined }),
+    searchNearby: jest.fn().mockResolvedValue({ candidates: [], nextPageToken: undefined }),
     getWebsiteUri: jest.fn(),
     getFullDetails: jest.fn(),
   };
@@ -57,7 +75,7 @@ describe('Discovery + Leads (e2e)', () => {
     clerkUserId: 'user_1',
     name: 'Jane Doe',
     email: 'jane@riznexia.com',
-    role: 'SALES_REP',
+    role: 'SALES_EXECUTIVE',
   };
 
   beforeAll(async () => {
@@ -181,22 +199,35 @@ describe('Discovery + Leads (e2e)', () => {
   });
 
   describe('GET /discovery-jobs/:id', () => {
-    it('returns 404 for an unknown job', async () => {
+    it('returns 404 for a well-formed but unknown job id', async () => {
       authenticateAs(salesRep);
       prismaMock.discoveryJob.findUnique.mockResolvedValue(null);
 
       const response = await request(app.getHttpServer())
-        .get('/discovery-jobs/missing-id')
+        .get('/discovery-jobs/22222222-2222-4222-8222-222222222222')
         .set('Authorization', 'Bearer valid.jwt');
 
       expect(response.status).toBe(404);
       expect(response.body.error.code).toBe('RESOURCE_NOT_FOUND');
     });
 
+    it('returns 400 VALIDATION_ERROR for a malformed (non-UUID) id, without touching the DB (audit finding #8)', async () => {
+      authenticateAs(salesRep);
+
+      const response = await request(app.getHttpServer())
+        .get('/discovery-jobs/not-a-uuid')
+        .set('Authorization', 'Bearer valid.jwt');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(prismaMock.discoveryJob.findUnique).not.toHaveBeenCalled();
+    });
+
     it('returns the job when found', async () => {
       authenticateAs(salesRep);
+      const jobId = '33333333-3333-4333-8333-333333333333';
       prismaMock.discoveryJob.findUnique.mockResolvedValue({
-        id: 'job-1',
+        id: jobId,
         city: 'Karachi',
         category: 'restaurant',
         status: DiscoveryJobStatus.COMPLETED,
@@ -204,12 +235,12 @@ describe('Discovery + Leads (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get('/discovery-jobs/job-1')
+        .get(`/discovery-jobs/${jobId}`)
         .set('Authorization', 'Bearer valid.jwt');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        id: 'job-1',
+        id: jobId,
         city: 'Karachi',
         category: 'restaurant',
         status: 'completed',
@@ -224,20 +255,27 @@ describe('Discovery + Leads (e2e)', () => {
       prismaMock.lead.findMany.mockResolvedValue([
         {
           id: 'lead-1',
-          googlePlaceId: 'place_1',
-          businessName: "Joe's Diner",
-          category: 'restaurant',
-          city: 'Karachi',
-          address: '123 Main St',
-          placesData: {},
-          websiteStatus: WebsiteStatusType.OUTDATED,
+          businessId: 'biz-1',
           pipelineStage: PipelineStage.NEW,
           assignedToId: null,
-          notes: null,
-          discoveryJobId: 'job-1',
+          tags: [],
           createdAt: new Date('2026-01-01T00:00:00Z'),
           updatedAt: new Date('2026-01-01T00:00:00Z'),
           deletedAt: null,
+          business: {
+            id: 'biz-1',
+            googlePlaceId: 'place_1',
+            businessName: "Joe's Diner",
+            category: 'restaurant',
+            city: 'Karachi',
+            address: '123 Main St',
+            placesData: {},
+            websiteStatus: WebsiteStatusType.OUTDATED,
+            discoveryJobId: 'job-1',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            deletedAt: null,
+          },
         },
       ]);
 
@@ -265,18 +303,38 @@ describe('Discovery + Leads (e2e)', () => {
         .set('Authorization', 'Bearer valid.jwt');
       expect(response.status).toBe(400);
     });
+
+    it('rejects a search term under 2 characters (audit finding #6)', async () => {
+      authenticateAs(salesRep);
+      const response = await request(app.getHttpServer())
+        .get('/leads?q=a')
+        .set('Authorization', 'Bearer valid.jwt');
+      expect(response.status).toBe(400);
+    });
   });
 
   describe('GET /leads/:id', () => {
-    it('returns 404 for an unknown lead', async () => {
+    it('returns 404 for a well-formed but unknown lead id', async () => {
       authenticateAs(salesRep);
       prismaMock.lead.findUnique.mockResolvedValue(null);
+
+      const response = await request(app.getHttpServer())
+        .get('/leads/44444444-4444-4444-8444-444444444444')
+        .set('Authorization', 'Bearer valid.jwt');
+
+      expect(response.status).toBe(404);
+    });
+
+    it('returns 400 VALIDATION_ERROR for a malformed (non-UUID) id, without touching the DB (audit finding #8)', async () => {
+      authenticateAs(salesRep);
 
       const response = await request(app.getHttpServer())
         .get('/leads/missing')
         .set('Authorization', 'Bearer valid.jwt');
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(prismaMock.lead.findUnique).not.toHaveBeenCalled();
     });
   });
 });

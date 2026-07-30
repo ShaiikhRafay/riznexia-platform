@@ -4,7 +4,7 @@ Internal tool for Riznexia employees: discovers local businesses without a websi
 
 ## Status
 
-Documentation (Phases 1–3 of the project roadmap) is complete — see [`/docs`](docs) for the full set: product/business docs, system/database/API/AI-agent architecture, UI/UX wireframes, and the [implementation roadmap](docs/21-implementation-roadmap.md). This repository currently holds **tooling scaffolding only** (Module M0, minus business logic) — no feature modules yet.
+Documentation (Phases 1–3 of the project roadmap) is complete — see [`/docs`](docs) for the full set: product/business docs, system/database/API/AI-agent architecture, UI/UX wireframes, and the [implementation roadmap](docs/21-implementation-roadmap.md). Modules **M1 (Lead Discovery)**, **M2 (Database & Core Domain Models)**, and **M3 (Authentication & RBAC)** are implemented; see [TASKS.md](TASKS.md) for current status. M4 onward are not started.
 
 ## Monorepo layout
 
@@ -39,15 +39,15 @@ pnpm dev                      # runs apps/web + apps/api in parallel
 
 ## Documentation index
 
-| Area | Doc |
-|---|---|
-| Product | [Vision](docs/01-product-vision.md), [BRD](docs/02-brd.md), [PRD](docs/03-prd.md) |
-| Architecture | [Technical Architecture](docs/04-technical-architecture.md), [System Architecture (deep)](docs/16-system-architecture.md) |
-| Data | [Database Design](docs/06-database-design.md), [Database Architecture (deep)](docs/18-database-architecture.md) |
-| API | [API Specifications](docs/07-api-specifications.md), [API Architecture (deep)](docs/19-api-architecture.md) |
-| AI | [AI Agent Architecture](docs/09-ai-agent-architecture.md), [AI Agents (deep)](docs/20-ai-agents-architecture.md) |
-| Design | [UI/UX Wireframes](docs/17-ui-ux-wireframes.md) |
-| Process | [Roadmap](docs/10-development-roadmap.md), [Implementation Roadmap](docs/21-implementation-roadmap.md), [Git Strategy](docs/11-git-strategy.md), [Coding Standards](docs/12-coding-standards.md), [Testing](docs/13-testing-strategy.md), [Deployment](docs/14-deployment-strategy.md), [Security](docs/15-security-strategy.md) |
+| Area         | Doc                                                                                                                                                                                                                                                                                                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product      | [Vision](docs/01-product-vision.md), [BRD](docs/02-brd.md), [PRD](docs/03-prd.md)                                                                                                                                                                                                                                                |
+| Architecture | [Technical Architecture](docs/04-technical-architecture.md), [System Architecture (deep)](docs/16-system-architecture.md)                                                                                                                                                                                                        |
+| Data         | [Database Design](docs/06-database-design.md), [Database Architecture (deep)](docs/18-database-architecture.md)                                                                                                                                                                                                                  |
+| API          | [API Specifications](docs/07-api-specifications.md), [API Architecture (deep)](docs/19-api-architecture.md)                                                                                                                                                                                                                      |
+| AI           | [AI Agent Architecture](docs/09-ai-agent-architecture.md), [AI Agents (deep)](docs/20-ai-agents-architecture.md)                                                                                                                                                                                                                 |
+| Design       | [UI/UX Wireframes](docs/17-ui-ux-wireframes.md)                                                                                                                                                                                                                                                                                  |
+| Process      | [Roadmap](docs/10-development-roadmap.md), [Implementation Roadmap](docs/21-implementation-roadmap.md), [Git Strategy](docs/11-git-strategy.md), [Coding Standards](docs/12-coding-standards.md), [Testing](docs/13-testing-strategy.md), [Deployment](docs/14-deployment-strategy.md), [Security](docs/15-security-strategy.md) |
 
 ## License
 

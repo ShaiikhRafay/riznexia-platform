@@ -63,7 +63,7 @@ export class TeamMemberService {
         clerkUserId: input.clerkUserId,
         name: input.name,
         email: input.email,
-        role: PrismaTeamRole.SALES_REP, // default role; an Admin promotes as needed
+        role: PrismaTeamRole.SALES_EXECUTIVE, // default role; an Admin promotes as needed
       },
     });
   }

@@ -17,19 +17,14 @@ describe('PlacesAdapter', () => {
   let fetchMock: jest.Mock;
 
   beforeEach(() => {
-    jest.useFakeTimers();
     config = { get: jest.fn().mockReturnValue('test-api-key') };
     adapter = new PlacesAdapter(config as unknown as ConfigService);
     fetchMock = jest.fn();
     global.fetch = fetchMock as unknown as typeof fetch;
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
   describe('searchText', () => {
-    it('returns candidates from a single page with no nextPageToken', async () => {
+    it('returns one page of candidates with no nextPageToken', async () => {
       fetchMock.mockResolvedValue(
         jsonResponse(200, {
           places: [
@@ -39,32 +34,54 @@ describe('PlacesAdapter', () => {
               formattedAddress: '123 Main St',
               types: ['restaurant', 'food'],
               primaryType: 'restaurant',
+              location: { latitude: 24.86, longitude: 67.01 },
             },
           ],
         }),
       );
 
-      const result = await adapter.searchText({
-        city: 'Karachi',
-        category: 'restaurant',
-        radiusKm: 15,
-      });
+      const result = await adapter.searchText({ city: 'Karachi', category: 'restaurant' });
 
-      expect(result).toEqual([
-        {
-          placeId: 'place_1',
-          displayName: "Joe's Diner",
-          formattedAddress: '123 Main St',
-          primaryType: 'restaurant',
-          types: ['restaurant', 'food'],
-        },
-      ]);
+      expect(result).toEqual({
+        candidates: [
+          {
+            placeId: 'place_1',
+            displayName: "Joe's Diner",
+            formattedAddress: '123 Main St',
+            primaryType: 'restaurant',
+            types: ['restaurant', 'food'],
+            latitude: 24.86,
+            longitude: 67.01,
+          },
+        ],
+        nextPageToken: undefined,
+      });
       expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not loop internally — one call, one page, caller owns pagination', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(200, { places: [{ id: 'p1' }], nextPageToken: 'token_2' }),
+      );
+
+      const result = await adapter.searchText({ city: 'Karachi', category: 'restaurant' });
+
+      expect(result.nextPageToken).toBe('token_2');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards a provided pageToken in the request body', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
+      await adapter.searchText({ city: 'Karachi', category: 'restaurant', pageToken: 'token_2' });
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { pageToken?: string };
+      expect(body.pageToken).toBe('token_2');
     });
 
     it('uses the cheap search field mask, not the full details one', async () => {
       fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
-      await adapter.searchText({ city: 'Karachi', category: 'restaurant', radiusKm: 15 });
+      await adapter.searchText({ city: 'Karachi', category: 'restaurant' });
 
       const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
       const headers = options.headers as Record<string, string>;
@@ -74,41 +91,53 @@ describe('PlacesAdapter', () => {
 
     it('builds a natural-language textQuery from category + city', async () => {
       fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
-      await adapter.searchText({ city: 'Lahore', category: 'salon', radiusKm: 15 });
+      await adapter.searchText({ city: 'Lahore', category: 'salon' });
 
       const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(options.body as string) as { textQuery: string };
       expect(body.textQuery).toBe('hair salons in Lahore');
     });
 
-    it('paginates up to the 3-page cap, waiting between pages for the token to become valid', async () => {
-      fetchMock
-        .mockResolvedValueOnce(
-          jsonResponse(200, { places: [{ id: 'p1' }], nextPageToken: 'token_2' }),
-        )
-        .mockResolvedValueOnce(
-          jsonResponse(200, { places: [{ id: 'p2' }], nextPageToken: 'token_3' }),
-        )
-        .mockResolvedValueOnce(jsonResponse(200, { places: [{ id: 'p3' }] }));
+    it('prefers keyword over category when both are given', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
+      await adapter.searchText({ city: 'Lahore', category: 'salon', keyword: 'barbershop' });
 
-      const promise = adapter.searchText({ city: 'Karachi', category: 'restaurant', radiusKm: 15 });
-      await jest.runAllTimersAsync();
-      const result = await promise;
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { textQuery: string };
+      expect(body.textQuery).toBe('barbershop in Lahore');
+    });
+  });
 
-      expect(result).toHaveLength(3);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+  describe('searchNearby', () => {
+    it('sends a circle location restriction built from latitude/longitude/radius', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
+      await adapter.searchNearby({ latitude: 24.86, longitude: 67.01, radiusMeters: 5000 });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/places:searchNearby');
+      const body = JSON.parse(options.body as string) as {
+        locationRestriction: {
+          circle: { center: { latitude: number; longitude: number }; radius: number };
+        };
+      };
+      expect(body.locationRestriction.circle).toEqual({
+        center: { latitude: 24.86, longitude: 67.01 },
+        radius: 5000,
+      });
     });
 
-    it('stops at 3 pages even if Google still returns a nextPageToken', async () => {
-      fetchMock.mockResolvedValue(
-        jsonResponse(200, { places: [{ id: 'p' }], nextPageToken: 'always-more' }),
-      );
+    it('includes the category as includedTypes when provided', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, { places: [] }));
+      await adapter.searchNearby({
+        latitude: 24.86,
+        longitude: 67.01,
+        radiusMeters: 5000,
+        category: 'restaurant',
+      });
 
-      const promise = adapter.searchText({ city: 'Karachi', category: 'restaurant', radiusKm: 15 });
-      await jest.runAllTimersAsync();
-      await promise;
-
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { includedTypes?: string[] };
+      expect(body.includedTypes).toEqual(['restaurant']);
     });
   });
 
@@ -134,7 +163,7 @@ describe('PlacesAdapter', () => {
   });
 
   describe('getFullDetails', () => {
-    it('maps reviews and photos, defaulting missing fields safely', async () => {
+    it('maps every widened field (Module M5), defaulting missing ones safely', async () => {
       fetchMock.mockResolvedValue(
         jsonResponse(200, {
           websiteUri: 'https://joesdiner.com',
@@ -144,6 +173,11 @@ describe('PlacesAdapter', () => {
             { rating: 5, text: { text: 'Great food' }, publishTime: '2026-01-01T00:00:00Z' },
           ],
           photos: [{ name: 'places/place_1/photos/abc' }],
+          internationalPhoneNumber: '+92 300 1234567',
+          location: { latitude: 24.86, longitude: 67.01 },
+          regularOpeningHours: { weekdayDescriptions: ['Mon: 9am-5pm'] },
+          businessStatus: 'OPERATIONAL',
+          googleMapsUri: 'https://maps.google.com/?cid=123',
         }),
       );
 
@@ -155,23 +189,46 @@ describe('PlacesAdapter', () => {
         userRatingCount: 120,
         reviews: [{ rating: 5, text: 'Great food', publishTime: '2026-01-01T00:00:00Z' }],
         photos: [{ name: 'places/place_1/photos/abc' }],
+        phone: '+92 300 1234567',
+        latitude: 24.86,
+        longitude: 67.01,
+        openingHours: { weekdayDescriptions: ['Mon: 9am-5pm'] },
+        businessStatus: 'OPERATIONAL',
+        googleMapsUri: 'https://maps.google.com/?cid=123',
       });
     });
 
-    it('defaults reviews/photos to empty arrays when Google omits them', async () => {
+    it('requests the widened field mask including phone/location/hours/status/mapsUri', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, {}));
+      await adapter.getFullDetails('place_1');
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const headers = options.headers as Record<string, string>;
+      const mask = headers['X-Goog-FieldMask'];
+      expect(mask).toContain('internationalPhoneNumber');
+      expect(mask).toContain('location');
+      expect(mask).toContain('regularOpeningHours');
+      expect(mask).toContain('businessStatus');
+      expect(mask).toContain('googleMapsUri');
+    });
+
+    it('defaults reviews/photos/optional fields safely when Google omits them', async () => {
       fetchMock.mockResolvedValue(jsonResponse(200, { websiteUri: null }));
       const result = await adapter.getFullDetails('place_1');
       expect(result.reviews).toEqual([]);
       expect(result.photos).toEqual([]);
+      expect(result.phone).toBeNull();
+      expect(result.latitude).toBeNull();
+      expect(result.businessStatus).toBeNull();
     });
   });
 
   describe('error handling', () => {
     it('maps a 400 response to BadRequestException (not retryable)', async () => {
       fetchMock.mockResolvedValue(jsonResponse(400, { error: { message: 'Invalid city' } }));
-      await expect(
-        adapter.searchText({ city: '', category: 'restaurant', radiusKm: 15 }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(adapter.searchText({ city: '', category: 'restaurant' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it('maps a 429/5xx response to UpstreamProviderException', async () => {

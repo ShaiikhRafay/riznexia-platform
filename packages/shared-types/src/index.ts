@@ -1,3 +1,7 @@
 export * from './team-member';
 export * from './discovery-job';
 export * from './lead';
+export * from './place-sync-job';
+export * from './business-analysis';
+export * from './theme-configuration';
+export * from './layout-configuration';

@@ -1,14 +1,16 @@
 # API Specifications — Riznexia AI Sales Platform
 
 **Status:** Draft (revised — internal-tool scope)
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope change note:** No `/billing`, no Stripe webhook, no `/clients` resource (websites now nest under leads). Auth context is an employee + role, not a tenant.
+>
+> **Doc-sync note (2026-07-29):** Role examples updated to the six roles implemented in Module M3 (Super Admin, Admin, Sales Manager, Developer, Sales Executive, Viewer); "Admin/Manager only" annotations updated to name the actual permission each gates. See Security Strategy §1 and DECISIONS.md D-029.
 
 ## 1. Conventions
 
 - **Style:** REST over JSON, versioned under `/api/v1`.
-- **Auth:** Bearer JWT issued by Clerk, validated by a NestJS guard on every route except public webhooks. The authenticated `team_member` (id + role) is derived server-side from the validated token.
+- **Auth:** Bearer JWT issued by Clerk, validated by a NestJS guard chain on every route except public webhooks — authentication (Clerk), then role/hierarchy/permission checks (Module M3 RBAC, Security Strategy §1). The authenticated `team_member` (id + role) is derived server-side from the validated token; no endpoint accepts a role/permission claim from the client.
 - **Errors:** Uniform envelope:
   ```json
   { "error": { "code": "LEAD_NOT_FOUND", "message": "Lead not found", "details": {} } }
@@ -19,18 +21,18 @@
 
 ## 2. Resource Groups
 
-| Group | Base path | Purpose |
-|---|---|---|
-| Auth/session | `/api/v1/me` | Current employee context (id, role) |
-| Discovery | `/api/v1/discovery-jobs` | Trigger and monitor lead discovery |
-| Leads | `/api/v1/leads` | Internal pipeline |
-| Websites | `/api/v1/leads/:leadId/websites` | Generation, preview |
-| Generation Jobs | `/api/v1/websites/:id/generation-jobs` | Pipeline stage status |
-| Deployments | `/api/v1/websites/:id/deployments` | Deploy trigger/status/history |
-| Sales Proposals | `/api/v1/leads/:id/proposals` | AI-drafted outreach |
-| Team | `/api/v1/team` | Team member management (Admin/Manager only) |
-| Cost | `/api/v1/cost` | Internal API cost dashboard data (Admin/Manager only) |
-| Webhooks | `/api/v1/webhooks/*` | Clerk, Vercel inbound events |
+| Group           | Base path                              | Purpose                                                                                     |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Auth/session    | `/api/v1/me`                           | Current employee context (id, role)                                                         |
+| Discovery       | `/api/v1/discovery-jobs`               | Trigger and monitor lead discovery                                                          |
+| Leads           | `/api/v1/leads`                        | Internal pipeline                                                                           |
+| Websites        | `/api/v1/leads/:leadId/websites`       | Generation, preview                                                                         |
+| Generation Jobs | `/api/v1/websites/:id/generation-jobs` | Pipeline stage status                                                                       |
+| Deployments     | `/api/v1/websites/:id/deployments`     | Deploy trigger/status/history                                                               |
+| Sales Proposals | `/api/v1/leads/:id/proposals`          | AI-drafted outreach                                                                         |
+| Team            | `/api/v1/team`                         | Team member management (`team:manage` permission — Super Admin/Admin/Sales Manager)         |
+| Cost            | `/api/v1/cost`                         | Internal API cost dashboard data (`cost:view` permission — Super Admin/Admin/Sales Manager) |
+| Webhooks        | `/api/v1/webhooks/*`                   | Clerk, Vercel inbound events                                                                |
 
 ## 3. Key Endpoints
 
@@ -102,17 +104,17 @@ Body: { "draftContent": "...", "status": "edited" }
 // status can also be set to "sent_manually" as a log entry — the system never sends itself
 ```
 
-### Team (Admin/Manager only)
+### Team (`team:manage` permission — Super Admin/Admin/Sales Manager)
 
 ```
 GET /api/v1/team
 POST /api/v1/team/invite
-Body: { "email": "...", "role": "sales_rep" }
+Body: { "email": "...", "role": "sales_executive" }
 PATCH /api/v1/team/:id
-Body: { "role": "manager" }
+Body: { "role": "sales_manager" }
 ```
 
-### Cost (Admin/Manager only)
+### Cost (`cost:view` permission — Super Admin/Admin/Sales Manager)
 
 ```
 GET /api/v1/cost/summary?period=last30days
@@ -136,4 +138,5 @@ POST /api/v1/webhooks/vercel   // deployment status callbacks
 Endpoints that enqueue Trigger.dev work (`discover`, `generate`, `deploy`) always return `202 Accepted` with a job/resource ID immediately; clients poll the corresponding `GET` status endpoint. No endpoint blocks on AI or external API latency.
 
 ---
+
 **Proceeding to Document 8 (UI/UX Design System).**

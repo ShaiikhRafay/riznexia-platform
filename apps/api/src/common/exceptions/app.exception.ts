@@ -30,6 +30,18 @@ export class ForbiddenRoleException extends AppException {
   }
 }
 
+// Module M3 (DECISIONS.md D-023) — distinct from ForbiddenRoleException:
+// that one fires on an exact-role-list (`@Roles()`) or hierarchy-threshold
+// (`@MinRole()`) mismatch, this one on a fine-grained permission
+// (`@RequirePermissions()`) mismatch. Same `FORBIDDEN` code and 403 status
+// (Doc 19 §4 doesn't distinguish these at the API-contract level — the
+// distinction is internal, for clearer server-side logs/messages only).
+export class ForbiddenPermissionException extends AppException {
+  constructor(message = 'Your role does not have the required permission for this action') {
+    super('FORBIDDEN', message, HttpStatus.FORBIDDEN);
+  }
+}
+
 export class InvalidWebhookSignatureException extends AppException {
   constructor(message = 'Invalid webhook signature') {
     super('INVALID_WEBHOOK_SIGNATURE', message, HttpStatus.UNAUTHORIZED);
@@ -50,5 +62,92 @@ export class UpstreamProviderException extends AppException {
 export class QuotaExceededException extends AppException {
   constructor(message = 'Monthly cost ceiling reached') {
     super('QUOTA_EXCEEDED', message, HttpStatus.TOO_MANY_REQUESTS);
+  }
+}
+
+// ---------- Module M4 — Lead Management (Doc 19 §4) ----------
+// These give the resource-specific 404 codes Doc 19's catalog already
+// documents (`LEAD_NOT_FOUND`, `TEAM_MEMBER_NOT_FOUND`) instead of the
+// generic `RESOURCE_NOT_FOUND` a bare NestJS NotFoundException produces.
+
+export class LeadNotFoundException extends AppException {
+  constructor(message = 'Lead not found') {
+    super('LEAD_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class BusinessNotFoundException extends AppException {
+  constructor(message = 'Business not found') {
+    super('BUSINESS_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class TeamMemberNotFoundException extends AppException {
+  constructor(message = 'Team member not found') {
+    super('TEAM_MEMBER_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// Doc 19 §4 lists this as the dedupe conflict on `google_place_id`. Module
+// M2 moved that unique constraint onto `Business`, so at the Lead layer the
+// equivalent conflict is "this business is already being pursued" —
+// `Lead.businessId` is unique, one pursuit per business.
+export class DuplicateLeadException extends AppException {
+  constructor(message = 'A lead already exists for this business') {
+    super('DUPLICATE_LEAD', message, HttpStatus.CONFLICT);
+  }
+}
+
+// Doc 19 §1/§4 — `?sort=` referenced a field outside the endpoint's
+// whitelist. Deliberately its own code rather than a generic
+// VALIDATION_ERROR, because the documented contract distinguishes them.
+export class InvalidSortFieldException extends AppException {
+  constructor(field: string, allowed: readonly string[]) {
+    super('INVALID_SORT_FIELD', `Cannot sort by '${field}'`, HttpStatus.BAD_REQUEST, {
+      allowed: [...allowed],
+    });
+  }
+}
+
+// ---------- Module M5 — Google Places Synchronization (Doc 19 §4) ----------
+
+export class PlaceSyncJobNotFoundException extends AppException {
+  constructor(message = 'Place sync job not found') {
+    super('PLACE_SYNC_JOB_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M6 — AI Business Analyzer (Doc 19 §4) ----------
+
+export class BusinessAnalysisNotFoundException extends AppException {
+  constructor(message = 'Business analysis not found') {
+    super('BUSINESS_ANALYSIS_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M7 — Theme Engine (Doc 19 §4) ----------
+
+// Founder's explicit gate: "If no theme reaches the minimum compatibility
+// score, return THEME_NOT_FOUND. Do not guess. Do not force an
+// incompatible theme." Thrown by ThemeSelectionService when
+// rankThemes() returns an empty list — every registered theme scored
+// below MINIMUM_COMPATIBILITY_SCORE.
+export class ThemeNotFoundException extends AppException {
+  constructor(message = 'No theme meets the minimum compatibility score for this business') {
+    super('THEME_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M8.1 — Layout Generator (Doc 19 §4) ----------
+
+// The Layout Generator has a hard dependency on a persisted ThemeConfiguration
+// (its second required input, alongside BusinessAnalysis) — mirrors
+// BusinessAnalysisNotFoundException's role for M7's own hard dependency on
+// M6.
+export class ThemeConfigurationNotFoundException extends AppException {
+  constructor(
+    message = 'No theme configuration exists yet for this lead — run theme selection (POST /leads/:id/theme) before layout generation',
+  ) {
+    super('THEME_CONFIGURATION_NOT_FOUND', message, HttpStatus.NOT_FOUND);
   }
 }

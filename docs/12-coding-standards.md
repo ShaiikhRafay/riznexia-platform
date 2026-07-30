@@ -15,7 +15,7 @@
 ## 2. NestJS (`apps/api`) Conventions
 
 - Feature-module structure: one module per domain area (`discovery`, `leads`, `generation`, `deployment`, `pitch`, `team`, `auth`), each with its own `*.controller.ts`, `*.service.ts`, `*.module.ts`, `dto/`.
-- **Role authorization is not optional per-endpoint logic** — a global guard attaches the authenticated `team_member` (id + role) from the validated Clerk JWT to the request context; role-restricted endpoints (team management, cost dashboard) declare required roles via decorator, checked centrally, not via ad hoc `if` checks scattered in handlers.
+- **Role/permission authorization is not optional per-endpoint logic** — a global guard attaches the authenticated `team_member` (id + role) from the validated Clerk JWT to the request context; role- or permission-restricted endpoints (team management, cost dashboard) declare requirements via decorator (`@Roles()`, `@MinRole()`, `@RequirePermissions()` — Module M3), checked centrally by the corresponding guard, not via ad hoc `if` checks scattered in handlers.
 - Business logic lives in services, never in controllers.
 - All external I/O (Google Places, Claude, GitHub, Vercel) goes through a dedicated provider class per integration, injected via DI — never called ad hoc from a service.
 - Async pipeline steps are Trigger.dev tasks defined alongside the module they belong to (e.g., `discovery/discovery.tasks.ts`), not scattered in a generic "jobs" folder.
@@ -50,4 +50,5 @@
 - Prettier + ESLint run as a pre-commit hook (lint-staged) and again as a required CI check.
 
 ---
+
 **Proceeding to Document 13 (Testing Strategy).**

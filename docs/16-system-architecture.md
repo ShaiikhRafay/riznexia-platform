@@ -2,11 +2,13 @@
 
 **Status:** Draft — Phase 2 deliverable (deep technical design)
 **Role:** Principal Software Architect pass
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope carried forward:** Internal-only tool for Riznexia employees (per the approved scope pivot). Single organization, RBAC-based access, no billing, no client portal, no editing UI. This document deepens and consolidates the summary-level design in Docs 04/05/06/07/09/15 into a full system architecture — it does not contradict them, it extends them to implementation-ready depth.
 >
 > **Terminology note:** The user's phase list used "Phase 2+" for future integrations. Since "Phase 2" is already our roadmap's System Design phase, this document labels deferred work **"Post-MVP"** instead, to avoid collision. No application/implementation code is included anywhere below, per instruction.
+>
+> **Doc-sync note (2026-07-29):** Updated against the implemented architecture through Module M3: the six-role RBAC model (§1), the Discovery/Pipeline bounded-context split following Module M2's `Business`/`Lead` entity split (§3), the extended guard chain and security request chain (§6, §15), the real `common/rbac`/`common/audit`/`business` folders (§17), and the `Organization` future model that now concretely exists as commented-out schema (§20, replacing the vaguer prior "agency_id" framing). See DECISIONS.md D-018, D-023–D-028, D-029.
 
 ---
 
@@ -15,7 +17,7 @@
 ```mermaid
 flowchart TB
     subgraph Users["Riznexia Employees"]
-        Rep[Sales Rep / Manager / Admin]
+        Rep["Sales Executive / Sales Manager / Admin / Super Admin / Developer / Viewer"]
     end
 
     subgraph Edge["Edge / CDN"]
@@ -65,7 +67,7 @@ flowchart TB
     Web --> Sentry
 ```
 
-**Reading this diagram:** everything inside "Platform" is one logical system (a modular monolith, not microservices — see §3 for why). "Generated Demo Sites" are build *outputs* of the platform, structurally outside it. External services are the only systems we don't control.
+**Reading this diagram:** everything inside "Platform" is one logical system (a modular monolith, not microservices — see §3 for why). "Generated Demo Sites" are build _outputs_ of the platform, structurally outside it. External services are the only systems we don't control.
 
 ## 2. Low-Level Architecture
 
@@ -93,7 +95,7 @@ sequenceDiagram
         PL-->>Q: raw results
         Q->>Cache: store results (TTL 24h, keyed by city+category)
     end
-    Q->>DB: upsert Lead rows (dedupe by google_place_id)
+    Q->>DB: upsert Business rows (dedupe by google_place_id), create a Lead per qualifying Business (Module M2)
     Q->>API: job status = completed
 
     U->>API: POST /leads/:id/websites/generate
@@ -159,15 +161,15 @@ flowchart LR
     BC1 -.->|usage event| BC7
 ```
 
-| Context | Owns | Never reaches into |
-|---|---|---|
-| Discovery | `discovery_job`, raw Places data ingestion | Generation internals |
-| Pipeline | `lead` state machine, assignment | AI provider details |
-| Generation | `website`, `brand_kit`, `website_page`, `generation_job` | Deployment mechanics |
-| Deployment | `deployment`, GitHub/Vercel calls | Content generation logic |
-| Outreach | `sales_proposal` | Deployment mechanics |
-| Identity | `team_member`, roles | Domain data (leads/websites) |
-| Observability | `cost_event`, audit logs | Writes to any domain table — read-only + event-subscriber |
+| Context       | Owns                                                                                                                       | Never reaches into                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Discovery     | `discovery_job`, `business` (raw Places data + web-presence status — split out of `lead` in Module M2, DECISIONS.md D-018) | Generation internals                                      |
+| Pipeline      | `lead` (pure pipeline state as of Module M2: stage, assignment, notes — no business data)                                  | AI provider details                                       |
+| Generation    | `website`, `brand_kit`, `website_page`, `generation_job`                                                                   | Deployment mechanics                                      |
+| Deployment    | `deployment`, GitHub/Vercel calls                                                                                          | Content generation logic                                  |
+| Outreach      | `sales_proposal`                                                                                                           | Deployment mechanics                                      |
+| Identity      | `team_member`, roles, role hierarchy + permission matrix (Module M3)                                                       | Domain data (leads/websites)                              |
+| Observability | `cost_event`, audit logs                                                                                                   | Writes to any domain table — read-only + event-subscriber |
 
 Cross-context communication happens via **domain events** (NestJS `EventEmitter2`, in-process pub/sub — see §18 Design Patterns), not direct service-to-service method calls across boundaries. This is the seam that makes future extraction to real microservices/queues a swap of the event transport, not a redesign.
 
@@ -213,8 +215,8 @@ riznexia-ai-website-factory/
   /leads                     pipeline list/kanban
   /leads/[id]                lead detail (analysis, generation, proposals)
   /leads/[id]/websites/[id]  generation review + deployment status
-  /team                      admin/manager: team management
-  /cost                      admin/manager: cost dashboard
+  /team                      team:manage permission (Super Admin/Admin/Sales Manager): team management
+  /cost                      cost:view permission (Super Admin/Admin/Sales Manager): cost dashboard
   ```
 - **Component layering:** `packages/ui` primitives (button, table, badge) → composed feature components (colocated per route, e.g., `PipelineKanban`) → pages. No premature promotion of page-specific components into the shared package.
 
@@ -237,8 +239,9 @@ flowchart TB
 ```
 
 **Cross-cutting concerns**, applied globally, not per-handler:
-- **Guards:** JWT validation (Clerk) → role resolution → route-level role decorator check.
-- **Interceptors:** request/response logging (correlation ID injection — §14), response envelope shaping.
+
+- **Guards (Module M3):** JWT validation (Clerk) → role resolution → exact-role-list check (`RolesGuard`) → role-hierarchy check (`MinRoleGuard`) → fine-grained permission check (`PermissionsGuard`). Each of the three role/permission guards is a no-op unless its decorator (`@Roles()`/`@MinRole()`/`@RequirePermissions()`) is present on the route (DECISIONS.md D-025, D-026).
+- **Interceptors:** request/response logging (correlation ID injection — §14), response envelope shaping, plus `AuditLogInterceptor` (Module M3) — records a privileged action to `audit_log` on success for any route carrying `@Audited()`; no-op otherwise.
 - **Pipes:** zod-backed validation on every DTO.
 - **Exception filters:** map typed domain exceptions to the standard error envelope (Doc 07 §1).
 - **Domain events:** `EventEmitter2` used for in-process pub/sub across bounded contexts (§3) — e.g., `WebsiteGeneratedEvent` triggers cost-logging and lead-pipeline-stage suggestions without the Generation context importing the Observability or Pipeline context directly.
@@ -302,16 +305,16 @@ flowchart LR
 - **Idempotency:** every task keyed by the `Idempotency-Key` passed from the originating API call (Doc 07 §1) — a retried task is a no-op if its output already exists.
 - **Dead-letter handling:** a task that exhausts retries marks its `generation_job`/`deployment` row `failed` (visible to the rep) and emits an alert to the internal ops channel — never fails silently.
 
-## 10. Cache Layer *(new relative to Phase 1 docs)*
+## 10. Cache Layer _(new relative to Phase 1 docs)_
 
 **Technology:** Upstash Redis (serverless, pairs naturally with Vercel/Railway — no server to manage).
 
-| Use case | Key pattern | TTL |
-|---|---|---|
-| Rate limiting (per-rep, global) | `ratelimit:{scope}:{repId}:{window}` | rolling window |
-| Cost-quota counters | `cost:monthly:{scope}` | resets monthly |
-| Discovery result caching (avoid duplicate Places spend on repeat searches) | `discovery:{city}:{category}` | 24h |
-| Idempotency-key result cache (fast-path repeat requests) | `idem:{key}` | 1h |
+| Use case                                                                   | Key pattern                          | TTL            |
+| -------------------------------------------------------------------------- | ------------------------------------ | -------------- |
+| Rate limiting (per-rep, global)                                            | `ratelimit:{scope}:{repId}:{window}` | rolling window |
+| Cost-quota counters                                                        | `cost:monthly:{scope}`               | resets monthly |
+| Discovery result caching (avoid duplicate Places spend on repeat searches) | `discovery:{city}:{category}`        | 24h            |
+| Idempotency-key result cache (fast-path repeat requests)                   | `idem:{key}`                         | 1h             |
 
 This is **not** a general HTTP response cache — Next.js/Vercel's own caching covers that layer for the dashboard. Redis here exists specifically to make cost governance (§ BR-7 in the BRD) and duplicate-work avoidance cheap and centralized, rather than reimplemented per endpoint.
 
@@ -320,7 +323,7 @@ This is **not** a general HTTP response cache — Next.js/Vercel's own caching c
 Cloudflare R2, namespaced and access-controlled:
 
 - **Key convention:** `{website_id}/logo.{ext}`, `{website_id}/pages/{page_slug}/{asset}.{ext}` — never a flat/global namespace, and never sequentially guessable (Security Strategy §2).
-- **Access pattern:** no public bucket. Assets are served via signed, time-limited URLs generated by the API on demand (dashboard preview) or baked into the generated site's build (public demo assets, which *are* meant to be public once deployed — the distinction is: R2 access during generation/review is signed, but assets bundled into a deployed demo site are public by definition, same as any live website's images).
+- **Access pattern:** no public bucket. Assets are served via signed, time-limited URLs generated by the API on demand (dashboard preview) or baked into the generated site's build (public demo assets, which _are_ meant to be public once deployed — the distinction is: R2 access during generation/review is signed, but assets bundled into a deployed demo site are public by definition, same as any live website's images).
 - **Lifecycle:** assets tied to a `website_id`; soft-deleted alongside the website record, hard-purged on the same retention schedule (Security Strategy §7).
 
 ## 12. Deployment Architecture
@@ -359,19 +362,19 @@ flowchart TB
 
 Two independent deployment lifecycles: the **platform** (this section) follows the standard CI/CD promotion path (§16); **generated demo sites** are created/redeployed on-demand by the platform itself as a product feature, entirely outside this pipeline.
 
-## 13. Monitoring *(new relative to Phase 1 docs)*
+## 13. Monitoring _(new relative to Phase 1 docs)_
 
-| Layer | Tool | What it covers |
-|---|---|---|
-| Application errors | Sentry (frontend + backend) | Unhandled exceptions, stack traces, release tracking |
-| Infra health | Vercel / Railway built-in metrics | CPU/memory, request latency, deploy status |
-| Pipeline observability | Trigger.dev dashboard | Task success/failure rates, retry counts, duration |
-| Business metrics | Internal `/cost` dashboard + a lightweight ops dashboard | Demos generated/week, cost per demo, quota utilization |
-| Uptime | A simple scheduled healthcheck hitting `/health` (Better Uptime or equivalent free tier) | Platform availability |
+| Layer                  | Tool                                                                                     | What it covers                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Application errors     | Sentry (frontend + backend)                                                              | Unhandled exceptions, stack traces, release tracking   |
+| Infra health           | Vercel / Railway built-in metrics                                                        | CPU/memory, request latency, deploy status             |
+| Pipeline observability | Trigger.dev dashboard                                                                    | Task success/failure rates, retry counts, duration     |
+| Business metrics       | Internal `/cost` dashboard + a lightweight ops dashboard                                 | Demos generated/week, cost per demo, quota utilization |
+| Uptime                 | A simple scheduled healthcheck hitting `/health` (Better Uptime or equivalent free tier) | Platform availability                                  |
 
 Alert routing: Sentry + healthcheck failures → Slack/email (Deployment Strategy §8), cost-ceiling-approaching (§10) → Slack, same channel as deploy failures to keep ops signal in one place for a small team.
 
-## 14. Logging *(new relative to Phase 1 docs)*
+## 14. Logging _(new relative to Phase 1 docs)_
 
 - **Format:** structured JSON logging (Pino, via `packages/logger`) — never unstructured `console.log` in `apps/api`.
 - **Correlation:** every request gets a correlation ID (generated at the edge or propagated from an existing header), attached to every log line and to the `generation_job`/`deployment` row it produces — so a failure can be traced end-to-end across the async pipeline, not just within a single request.
@@ -386,14 +389,17 @@ Full policy lives in Doc 15; this section places it architecturally:
 ```mermaid
 flowchart LR
     Req[Incoming Request] --> TLS[TLS termination - Vercel/Railway]
-    TLS --> AuthGuard["AuthGuard\n(Clerk JWT validation)"]
-    AuthGuard --> RoleGuard["RoleGuard\n(role decorator check)"]
-    RoleGuard --> Pipe["ValidationPipe\n(zod schema)"]
+    TLS --> AuthGuard["ClerkAuthGuard\n(Clerk JWT validation)"]
+    AuthGuard --> RoleGuard["RolesGuard\n(exact role-list check)"]
+    RoleGuard --> MinRoleGuard["MinRoleGuard\n(role-hierarchy check)"]
+    MinRoleGuard --> PermGuard["PermissionsGuard\n(fine-grained permission check)"]
+    PermGuard --> Pipe["ValidationPipe\n(zod schema)"]
     Pipe --> Handler[Controller Handler]
-    Handler --> Filter["ExceptionFilter\n(typed errors -> envelope)"]
+    Handler --> AuditInt["AuditLogInterceptor\n(records @Audited() actions on success)"]
+    AuditInt --> Filter["ExceptionFilter\n(typed errors -> envelope)"]
 ```
 
-Every request passes through this exact chain — there is no endpoint that skips AuthGuard except the explicitly public, signature-verified webhook routes (Doc 07 §3).
+Every request passes through this exact chain — there is no endpoint that skips `ClerkAuthGuard` except the explicitly public, signature-verified webhook routes (Doc 07 §3). `RolesGuard`/`MinRoleGuard`/`PermissionsGuard` (Module M3, DECISIONS.md D-023–D-026) are each a no-op unless their respective decorator is present on the route — most routes today carry none of the three and are gated on authentication alone.
 
 ## 16. CI/CD
 
@@ -417,35 +423,44 @@ Matches Deployment Strategy §3 exactly — this diagram is the visual form of t
 
 ```
 apps/api/src/
-├── discovery/
+├── auth/                          # Clerk integration, TeamMemberService, GET /me (built)
+├── discovery/                     # built (Module M1) — actual shape below
 │   ├── discovery.controller.ts
 │   ├── discovery.service.ts
-│   ├── discovery.tasks.ts        # Trigger.dev task definitions
+│   ├── discovery-runner.service.ts  # pipeline logic; in-process dispatch today, DECISIONS.md D-004
 │   ├── discovery.module.ts
 │   └── dto/
-├── leads/
+├── leads/                         # built (Modules M1–M2)
 │   ├── leads.controller.ts
 │   ├── leads.service.ts
+│   ├── lead.mapper.ts
 │   ├── leads.module.ts
 │   └── dto/
-├── generation/
+├── business/                      # built (Module M2) — not in the original plan; see DECISIONS.md D-018
+│   ├── business.service.ts
+│   ├── business.mapper.ts
+│   └── business.module.ts
+├── generation/                    # not built — planned shape unchanged
 │   ├── generation.controller.ts
 │   ├── generation.service.ts
 │   ├── generation.tasks.ts
 │   ├── generation.module.ts
 │   └── dto/
-├── deployment/                    # same shape
-├── pitch/                         # same shape
-├── team/                          # same shape
+├── deployment/                    # not built — same shape as generation/
+├── pitch/                         # not built — same shape as generation/
+├── team/                          # not built — same shape as generation/ (Backlog item, docs/21 §5)
 ├── common/
-│   ├── guards/                    # AuthGuard, RoleGuard
+│   ├── guards/                    # ClerkAuthGuard, RolesGuard, MinRoleGuard, PermissionsGuard (Module M3)
+│   ├── rbac/                      # role-hierarchy.constants.ts, permission.constants.ts, rbac.module.ts (Module M3)
+│   ├── audit/                     # audit-log.service.ts, audit-log.interceptor.ts, audit.module.ts (Module M3)
 │   ├── interceptors/              # logging, response shaping
 │   ├── filters/                   # exception filter
-│   └── decorators/                # @Roles(), @CurrentUser()
+│   └── decorators/                # @Public(), @Roles(), @MinRole(), @RequirePermissions(), @Audited(), @CurrentUser()
 ├── adapters/
-│   ├── places.adapter.ts
-│   ├── github.adapter.ts
-│   └── vercel.adapter.ts
+│   ├── places.adapter.ts          # built (Module M1)
+│   ├── website-fetch.adapter.ts   # built (Module M1)
+│   ├── github.adapter.ts          # not built
+│   └── vercel.adapter.ts          # not built
 └── main.ts
 
 apps/web/app/
@@ -463,16 +478,16 @@ apps/web/app/
 
 ## 18. Design Patterns
 
-| Pattern | Where used | Why |
-|---|---|---|
-| Dependency Injection | Throughout `apps/api` (NestJS core) | Testability, swappable adapters |
-| Strategy | `AiTextProvider` / `AiImageProvider` interfaces (§7) | Swap Claude/Recraft/Flux without touching callers |
-| Adapter | `adapters/*.ts` (Places, GitHub, Vercel) | Isolate third-party API shape from domain code |
-| Repository | Prisma service layer (§8) | Single choke point for DB access, mockable in tests |
-| Factory | Site template selection by category (`apps/site-template`) | Category → template resolution without conditional sprawl in generation logic |
-| Observer / Domain Events | `EventEmitter2` cross-context communication (§3, §6) | Decouple bounded contexts; extraction-ready |
-| Circuit breaker | Wrapping Places/Claude/image-gen adapters | Prevent cascading failure/cost spend if an external API degrades (fails fast after N consecutive errors, auto half-open retry) |
-| Retry with backoff | Trigger.dev task config (§9) | Resilience against transient external failures without custom retry code |
+| Pattern                  | Where used                                                 | Why                                                                                                                            |
+| ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Dependency Injection     | Throughout `apps/api` (NestJS core)                        | Testability, swappable adapters                                                                                                |
+| Strategy                 | `AiTextProvider` / `AiImageProvider` interfaces (§7)       | Swap Claude/Recraft/Flux without touching callers                                                                              |
+| Adapter                  | `adapters/*.ts` (Places, GitHub, Vercel)                   | Isolate third-party API shape from domain code                                                                                 |
+| Repository               | Prisma service layer (§8)                                  | Single choke point for DB access, mockable in tests                                                                            |
+| Factory                  | Site template selection by category (`apps/site-template`) | Category → template resolution without conditional sprawl in generation logic                                                  |
+| Observer / Domain Events | `EventEmitter2` cross-context communication (§3, §6)       | Decouple bounded contexts; extraction-ready                                                                                    |
+| Circuit breaker          | Wrapping Places/Claude/image-gen adapters                  | Prevent cascading failure/cost spend if an external API degrades (fails fast after N consecutive errors, auto half-open retry) |
+| Retry with backoff       | Trigger.dev task config (§9)                               | Resilience against transient external failures without custom retry code                                                       |
 
 ## 19. Scalability Strategy
 
@@ -480,22 +495,23 @@ apps/web/app/
 - **Async work isolated from request/response cycle:** every expensive operation (discovery, generation, deployment) runs as a Trigger.dev task, so API instances stay cheap and fast regardless of pipeline load.
 - **Database:** Neon scales vertically first; read replicas (§8) and/or a dedicated reporting read-path are the next lever if the Cost/Observability context's queries start contending with transactional writes.
 - **Per-demo isolation:** each generated site is its own Vercel project — demo volume growing into the thousands (long-term vision) doesn't create a shared bottleneck, since each is independently hosted.
-- **Cost-bounded concurrency:** Trigger.dev per-task concurrency caps (§9) are the actual scaling *limiter* by design — this system intentionally trades raw throughput for cost predictability, appropriate for an internal tool, not a race-to-scale product.
+- **Cost-bounded concurrency:** Trigger.dev per-task concurrency caps (§9) are the actual scaling _limiter_ by design — this system intentionally trades raw throughput for cost predictability, appropriate for an internal tool, not a race-to-scale product.
 
 ## 20. Future Expansion Plan (Post-MVP)
 
 Designed for, not built now — flagged explicitly so today's architecture doesn't block them later:
 
-| Future capability | Why it's deferred | What today's design already allows |
-|---|---|---|
-| Real-time pipeline updates (WebSocket/SSE) | Polling is sufficient at current usage volume | TanStack Query polling is a drop-in swap for a subscription-based fetcher later; no rearchitecture needed |
-| External productization (multi-tenant SaaS) | Explicitly out of current scope (BRD) | Every domain table already has a natural single-column extension point (`agency_id`) if this is ever revisited — not present now, but the schema shape doesn't fight it |
-| Client portal / customer login | Explicit non-goal | Auth is cleanly isolated to Clerk + `team_member`; a second, separate auth flow for external users would not touch this one |
-| Billing/subscription | Explicit non-goal | N/A — would be a net-new bounded context, not a retrofit |
-| ML-based lead-quality scoring | Needs real usage data first (heuristic detection is the MVP baseline) | `business_analysis` and `cost_event` data already being collected is exactly the training signal this would need later |
-| Multi-region deployment | Not justified at current team/usage scale | Neon and Vercel both support multi-region expansion without a platform rewrite |
-| Dedicated log aggregation (Axiom/Logtail) | Railway's native logs suffice today | `packages/logger`'s structured JSON output is aggregator-agnostic already |
-| BYO GitHub/Vercel accounts per rep/team | No external tenant to segment by | Deployment adapters (§18) are already isolated behind an interface; swapping credentials per-context is additive |
+| Future capability                           | Why it's deferred                                                     | What today's design already allows                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Real-time pipeline updates (WebSocket/SSE)  | Polling is sufficient at current usage volume                         | TanStack Query polling is a drop-in swap for a subscription-based fetcher later; no rearchitecture needed                                                                                                                                                                                |
+| External productization (multi-tenant SaaS) | Explicitly out of current scope (BRD)                                 | `packages/db/prisma/schema.prisma` already has a commented-out `Organization` model and a documented `TeamMember` attachment point (Module M3, DECISIONS.md D-027) — a concrete step beyond the earlier generic "an `agency_id` column would fit" framing, though still inactive/unbuilt |
+| Client portal / customer login              | Explicit non-goal                                                     | Auth is cleanly isolated to Clerk + `team_member`; a second, separate auth flow for external users would not touch this one                                                                                                                                                              |
+| Billing/subscription                        | Explicit non-goal                                                     | N/A — would be a net-new bounded context, not a retrofit                                                                                                                                                                                                                                 |
+| ML-based lead-quality scoring               | Needs real usage data first (heuristic detection is the MVP baseline) | `business_analysis` and `cost_event` data already being collected is exactly the training signal this would need later                                                                                                                                                                   |
+| Multi-region deployment                     | Not justified at current team/usage scale                             | Neon and Vercel both support multi-region expansion without a platform rewrite                                                                                                                                                                                                           |
+| Dedicated log aggregation (Axiom/Logtail)   | Railway's native logs suffice today                                   | `packages/logger`'s structured JSON output is aggregator-agnostic already                                                                                                                                                                                                                |
+| BYO GitHub/Vercel accounts per rep/team     | No external tenant to segment by                                      | Deployment adapters (§18) are already isolated behind an interface; swapping credentials per-context is additive                                                                                                                                                                         |
 
 ---
-**This document is Phase 2's deep-design deliverable. Awaiting approval before Phase 3 (UI/UX) begins.**
+
+**This document is Phase 2's deep-design deliverable. As of 2026-07-29, Modules M1–M3 (docs/21-implementation-roadmap.md) are implemented against this architecture — see the doc-sync note above for what changed since the original Phase 2 approval.**

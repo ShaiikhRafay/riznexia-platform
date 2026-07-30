@@ -1,0 +1,26 @@
+{
+  "name": "@riznexia/website-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Website Generator: Layout Generator (M8.1), Component Generator (M8.2), Content Binding (M8.3), React/Next.js Assembly (M8.4) — Doc 21 M8.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@riznexia/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@riznexia/config-eslint": "workspace:*",
+    "@riznexia/config-typescript": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.11.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

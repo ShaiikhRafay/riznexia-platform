@@ -9,7 +9,7 @@
 
 ## 1. Module Objective
 
-Let a Riznexia rep run a discovery search (city + category) and get back real, qualified leads — businesses with no website or a clearly outdated one — persisted and ready to enter the pipeline. This is the entry point of the entire product (Doc 01): every downstream module (Business Intelligence, Generation, Deployment, Outreach) operates on leads this module produces. Matches Doc 21 M1's Definition of Done: _PRD FR-1.1–FR-1.6 pass; a rep runs a real search against a live city and sees qualified leads appear._
+Let a Riznexia rep run a discovery search (city + category) and get back real, qualified leads — businesses with no website or a clearly outdated one — persisted and ready to enter the pipeline. This is the entry point of the entire product (Doc 01): every downstream module (AI Business Analyzer, Website Generator, Deployment, Sales CRM) operates on leads this module produces. Matches Doc 21 M1's Definition of Done: _PRD FR-1.1–FR-1.6 pass; a rep runs a real search against a live city and sees qualified leads appear._
 
 ## 2. Functional Requirements
 
@@ -138,7 +138,7 @@ sequenceDiagram
 
 ## 7. Database Tables Involved
 
-**No new tables or migrations required** — `discovery_job` and `lead` were already fully designed and built in Module M0 (Doc 18 §8, `packages/db/prisma/schema.prisma`). This module is pure application logic against an existing schema.
+**No new tables or migrations required** — `discovery_job` and `lead` were already fully designed and built during initial project setup (Doc 18 §8, `packages/db/prisma/schema.prisma`). This module is pure application logic against an existing schema. (Note: Module M2 — Database & Core Domain Models later restructured this schema, splitting `Business` out of `Lead`; this section reflects the schema as it stood at M1's design-review time, not the current state — see docs/18-database-architecture.md and DECISIONS.md D-018 for what changed.)
 
 | Table           | Role in this module                                                                                                   |
 | --------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -150,18 +150,18 @@ Relevant existing indexes already cover this module's query patterns: `leads_goo
 
 ## 8. API Endpoints
 
-All already specified in Doc 19 §5 (OpenAPI) — this module _implements_ them, it doesn't design new surface. Scope boundary vs. Module M2 (Lead Pipeline/CRM):
+All already specified in Doc 19 §5 (OpenAPI) — this module _implements_ them, it doesn't design new surface. Scope boundary vs. Module M4 (Lead Management APIs) — renumbered 2026-07-28, DECISIONS.md D-022; this was "Module M2 (Lead Pipeline/CRM)" at design-review time:
 
-| Endpoint                                     | In scope for M1?                           |
-| -------------------------------------------- | ------------------------------------------ |
-| `POST /discovery-jobs`                       | Yes — core deliverable                     |
-| `GET /discovery-jobs`                        | Yes                                        |
-| `GET /discovery-jobs/{id}`                   | Yes                                        |
-| `GET /leads` (list, read-only)               | Yes — needed to see results land           |
-| `GET /leads/{id}` (read-only)                | Yes                                        |
-| `PATCH /leads/{id}` (stage/assignment/notes) | **No — Module M2**                         |
-| `DELETE /leads/{id}`                         | **No — Module M2**                         |
-| `/leads/{id}/business`                       | **No — Module M3** (Business Intelligence) |
+| Endpoint                                     | In scope for M1?                          |
+| -------------------------------------------- | ----------------------------------------- |
+| `POST /discovery-jobs`                       | Yes — core deliverable                    |
+| `GET /discovery-jobs`                        | Yes                                       |
+| `GET /discovery-jobs/{id}`                   | Yes                                       |
+| `GET /leads` (list, read-only)               | Yes — needed to see results land          |
+| `GET /leads/{id}` (read-only)                | Yes                                       |
+| `PATCH /leads/{id}` (stage/assignment/notes) | **No — Module M4**                        |
+| `DELETE /leads/{id}`                         | **No — Module M4**                        |
+| `/leads/{id}/business`                       | **No — Module M6** (AI Business Analyzer) |
 
 ## 9. Google Places API Integration Strategy
 
@@ -249,7 +249,7 @@ common/classifiers/
 └── website-status.classifier.ts  # heuristic (HTTPS/viewport/copyright-year) + AI-fallback trigger
 ```
 
-`leads.module.ts` is intentionally thin here — full CRUD/mutation logic is Module M2's addition to the same module, not a separate one, since they share the underlying `Lead` domain (Doc 16 §3's bounded-context boundary is "Pipeline Context owns `lead`," which M1 writes into via `leads.service.ts`'s upsert method rather than owning a competing write path).
+`leads.module.ts` is intentionally thin here — full CRUD/mutation logic is Module M4's addition to the same module, not a separate one, since they share the underlying `Lead` domain (Doc 16 §3's bounded-context boundary is "Pipeline Context owns `lead`," which M1 writes into via `leads.service.ts`'s upsert method rather than owning a competing write path). (Note: `leads.service.ts`'s write path was itself reworked by Module M2 — see DECISIONS.md D-018 — the bounded-context boundary described here still holds, just via `ensureForBusiness` rather than the original `upsertByPlaceId`.)
 
 ## 15. Testing Strategy
 

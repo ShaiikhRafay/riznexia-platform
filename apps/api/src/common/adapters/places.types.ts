@@ -8,6 +8,13 @@ export interface PlacesCandidate {
   formattedAddress: string;
   primaryType: string | null;
   types: string[];
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface PlacesSearchPage {
+  candidates: PlacesCandidate[];
+  nextPageToken?: string;
 }
 
 export interface PlaceReview {
@@ -20,10 +27,18 @@ export interface PlacePhoto {
   name: string;
 }
 
+// Module M5 — widened from the M1-era shape to cover the Business fields
+// this module promotes to real columns (Doc 21 M5 entry).
 export interface PlaceFullDetails {
   websiteUri: string | null;
   rating: number | null;
   userRatingCount: number | null;
   reviews: PlaceReview[];
   photos: PlacePhoto[];
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  openingHours: unknown | null;
+  businessStatus: string | null;
+  googleMapsUri: string | null;
 }

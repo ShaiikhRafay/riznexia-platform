@@ -1,9 +1,11 @@
 # Testing Strategy — Riznexia AI Sales Platform
 
 **Status:** Draft (revised — internal-tool scope)
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope change note:** Cross-tenant isolation testing removed (no tenant concept). Replaced with role-authorization testing. Billing webhook tests removed (no billing).
+>
+> **Doc-sync note (2026-07-29):** §3/§4 role examples updated to Module M3's implemented taxonomy; achieved in practice via `apps/api/test/rbac.e2e-spec.ts` (22 tests) plus 55 new unit tests across the guard/permission/audit layer. See DECISIONS.md D-029.
 
 ## 1. Philosophy
 
@@ -11,24 +13,24 @@ Test the things that are expensive to get wrong: role authorization, cost govern
 
 ## 2. Test Layers
 
-| Layer | Tooling | Scope |
-|---|---|---|
-| Unit | Vitest | Pure functions, service methods with mocked dependencies, zod schema validation, AI response parsers |
-| Integration | Vitest + NestJS Testing Module + Supertest | API endpoints against a real (test) Postgres instance, including auth guards and role checks |
-| E2E | Playwright | Critical dashboard user journeys end-to-end against a running staging-like environment |
-| AI regression | Custom eval harness (`packages/ai/evals`) | Prompt-version snapshot tests against golden business inputs |
-| Contract | zod schemas in `packages/shared-types` | Shared between frontend and backend |
+| Layer         | Tooling                                    | Scope                                                                                                |
+| ------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Unit          | Vitest                                     | Pure functions, service methods with mocked dependencies, zod schema validation, AI response parsers |
+| Integration   | Vitest + NestJS Testing Module + Supertest | API endpoints against a real (test) Postgres instance, including auth guards and role checks         |
+| E2E           | Playwright                                 | Critical dashboard user journeys end-to-end against a running staging-like environment               |
+| AI regression | Custom eval harness (`packages/ai/evals`)  | Prompt-version snapshot tests against golden business inputs                                         |
+| Contract      | zod schemas in `packages/shared-types`     | Shared between frontend and backend                                                                  |
 
 ## 3. Coverage Targets
 
 - `apps/api` domain services (business logic): **80%+** line coverage, enforced in CI.
-- Role-authorization code paths: **100%** — every guard branch explicitly tested, including negative cases (a Sales Rep attempting an Admin-only action must fail).
+- Role-authorization code paths: **100%** — every guard branch explicitly tested, including negative cases (e.g. a Sales Executive or Viewer attempting an Admin/Sales-Manager-only action must fail — Module M3, `apps/api/test/rbac.e2e-spec.ts`).
 - `apps/web` components: pragmatic coverage on logic-bearing components; no enforced number on purely presentational components.
 - `packages/ai`: response parsers/validation at **80%+**; output quality is covered by the eval harness, not line-coverage percentage.
 
 ## 4. Critical Test Scenarios (must exist before Phase 8 / launch)
 
-- **Role authorization:** A Sales Rep cannot access Team management or Cost dashboard endpoints; Admin/Manager-only actions correctly reject non-privileged callers.
+- **Role authorization:** A role without `team:manage`/`cost:view` cannot access Team management or Cost dashboard endpoints; permission-gated actions correctly reject callers lacking the required role, hierarchy level, or permission (Module M3).
 - **Qualification gate:** Generation cannot be triggered on a lead that hasn't reached "Qualified" stage (PRD FR-4.1, AI Agent Architecture §1).
 - **Async pipeline retry correctness:** A failed generation stage retries only that stage, does not duplicate prior stage output or double-charge AI cost.
 - **Idempotency:** Repeated calls with the same `Idempotency-Key` on `generate`/`deploy`/`discover` endpoints do not create duplicate jobs.
@@ -46,4 +48,5 @@ Test the things that are expensive to get wrong: role authorization, cost govern
 - AI-dependent tests use recorded/mocked provider responses for unit/integration layers; only the eval harness and scheduled staging smoke tests make real AI provider calls.
 
 ---
+
 **Proceeding to Document 14 (Deployment Strategy).**

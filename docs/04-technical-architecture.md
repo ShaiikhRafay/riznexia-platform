@@ -1,16 +1,18 @@
 # Technical Architecture — Riznexia AI Sales Platform
 
 **Status:** Draft (revised — internal-tool scope)
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope change note:** Single-organization internal tool. No multi-tenancy, no billing integration, no client-facing deployment ownership ambiguity — demo sites are always Riznexia-owned.
+>
+> **Doc-sync note (2026-07-29):** Role references updated to the six roles implemented in Module M3. See Security Strategy §1, DECISIONS.md D-029.
 
 ## 1. Architecture Principles
 
 - Favor managed services over self-hosted infrastructure — small internal team, speed matters more than owning every layer.
 - Keep AI provider access behind one internal seam (`AiService`) so model/provider swaps are config changes.
 - Treat the generation pipeline as a durable, resumable async workflow — steps fail independently and must retry without redoing prior work.
-- **Single organization, role-based access.** There is no tenant concept — every user is a Riznexia employee, differentiated only by role (Admin, Manager, Sales Rep).
+- **Single organization, role-based access.** There is no tenant concept — every user is a Riznexia employee, differentiated by role (Super Admin, Admin, Sales Manager, Sales Executive, Developer, Viewer — Module M3) via a hierarchy for seniority checks plus a fine-grained permission matrix for specific actions, not role name alone (Security Strategy §1).
 - Generated demo sites are a build artifact/output of the platform, architecturally separate from the platform's own codebase, and always deployed under Riznexia's own GitHub/Vercel accounts.
 
 ## 2. System Overview
@@ -56,15 +58,15 @@ Note: no billing/Stripe component exists in this system — there is nothing to 
 
 ## 3. Core Components
 
-| Component | Technology | Responsibility |
-|---|---|---|
-| Internal Dashboard | Next.js (App Router), Vercel | Employee-facing UI: pipeline, generation, preview, deployment status |
-| API | NestJS, Railway | Business logic, auth guards, role enforcement, orchestration triggers |
-| AiService Gateway | NestJS module | Single seam for all LLM/image-gen calls; prompt versioning, provider abstraction |
-| Job Orchestrator | Trigger.dev | Durable multi-step workflows: discovery, generation, deployment pipelines |
-| Database | Postgres (Neon) | System of record |
-| Object Storage | Cloudflare R2 | Generated images/logos/site assets |
-| Auth | Clerk | Employee login only; single internal org, roles via custom claims/DB |
+| Component          | Technology                   | Responsibility                                                                                                                                                                                                                       |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Internal Dashboard | Next.js (App Router), Vercel | Employee-facing UI: pipeline, generation, preview, deployment status                                                                                                                                                                 |
+| API                | NestJS, Railway              | Business logic, auth guards, role enforcement, orchestration triggers                                                                                                                                                                |
+| AiService Gateway  | NestJS module                | Single seam for all LLM/image-gen calls; prompt versioning, provider abstraction                                                                                                                                                     |
+| Job Orchestrator   | Trigger.dev                  | Durable multi-step workflows: discovery, generation, deployment pipelines                                                                                                                                                            |
+| Database           | Postgres (Neon)              | System of record                                                                                                                                                                                                                     |
+| Object Storage     | Cloudflare R2                | Generated images/logos/site assets                                                                                                                                                                                                   |
+| Auth               | Clerk                        | Employee login only (JWT issuance, sessions, refresh — all Clerk-managed, no custom credential handling in our code); single internal org, role resolved server-side from `team_member.role` in our own DB, never from a Clerk claim |
 
 ## 4. Core Data Flow: Lead-to-Live-Demo Pipeline
 
@@ -107,7 +109,7 @@ Every step is an independently retryable Trigger.dev task — a failed deploy ca
 
 - **No tenant concept.** All data belongs to Riznexia; there is no `agency_id`/tenant scoping anywhere in the schema.
 - Clerk handles employee login, restricted to Riznexia's email domain (invite-only, no public sign-up).
-- Roles (`admin`, `manager`, `sales_rep`) are stored on an internal `team_member` table and enforced via NestJS guards: e.g., only Admin/Manager can manage team accounts or view cost dashboards; any rep can run discovery/generation/deployment on their own or unassigned leads.
+- Roles (`super_admin`, `admin`, `sales_manager`, `developer`, `sales_executive`, `viewer` — Module M3) are stored on an internal `team_member` table and enforced via a NestJS guard chain: authentication, then an exact-role-list check, a role-hierarchy ("at least this seniority") check, and a fine-grained permission check, in that order (System Architecture §15). E.g., only Super Admin/Admin/Sales Manager hold the `team:manage`/`cost:view` permissions needed to manage team accounts or view cost dashboards; any role with `discovery:run` (every role except Developer/Viewer) can run discovery on their own or unassigned leads.
 - Leads carry an `assigned_to` field (optional) rather than tenant ownership — visibility is org-wide by default (any rep can see any lead), with assignment used for accountability, not access restriction (Managers may later restrict this if needed, not an MVP requirement).
 
 ## 6. Demo Deployment Ownership
@@ -128,15 +130,15 @@ Every step is an independently retryable Trigger.dev task — a failed deploy ca
 
 ## 9. Key Architecture Decisions (ADR Summary)
 
-| Decision | Choice | Alternative considered | Why |
-|---|---|---|---|
-| Monorepo tool | Turborepo + pnpm | Nx | Simpler mental model, excellent Next.js/Vercel integration |
-| Backend framework | NestJS | Express/Fastify raw | Structure, DI, guards for role enforcement |
-| Job orchestration | Trigger.dev | Hand-rolled BullMQ + Redis | Durable execution, retries, observability without owning queue infra |
-| Database | Neon Postgres | Supabase, RDS | Serverless branching fits preview-env workflow; no unneeded auth/storage bundling |
-| Auth | Clerk | Auth.js self-rolled | Fast, secure employee auth; domain-restricted invite-only sign-up out of the box |
-| AI provider | Anthropic Claude (+ separate image API) | OpenAI, multi-provider from day one | Strong reasoning quality; single-vendor simplicity, gateway seam keeps swap cost low |
-| Billing | **None — not applicable** | — | No external customers to bill |
+| Decision          | Choice                                  | Alternative considered              | Why                                                                                  |
+| ----------------- | --------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------ |
+| Monorepo tool     | Turborepo + pnpm                        | Nx                                  | Simpler mental model, excellent Next.js/Vercel integration                           |
+| Backend framework | NestJS                                  | Express/Fastify raw                 | Structure, DI, guards for role enforcement                                           |
+| Job orchestration | Trigger.dev                             | Hand-rolled BullMQ + Redis          | Durable execution, retries, observability without owning queue infra                 |
+| Database          | Neon Postgres                           | Supabase, RDS                       | Serverless branching fits preview-env workflow; no unneeded auth/storage bundling    |
+| Auth              | Clerk                                   | Auth.js self-rolled                 | Fast, secure employee auth; domain-restricted invite-only sign-up out of the box     |
+| AI provider       | Anthropic Claude (+ separate image API) | OpenAI, multi-provider from day one | Strong reasoning quality; single-vendor simplicity, gateway seam keeps swap cost low |
+| Billing           | **None — not applicable**               | —                                   | No external customers to bill                                                        |
 
 ## 10. Resolved Decisions (previously open)
 
@@ -144,4 +146,5 @@ Every step is an independently retryable Trigger.dev task — a failed deploy ca
 - **Lead visibility:** Confirmed **org-wide** — any authenticated employee can see any lead regardless of assignment (Technical Architecture §5). Revisit only if Riznexia's sales org structure later requires per-rep/team partitioning.
 
 ---
+
 **Proceeding to Document 5 (Monorepo Structure).**

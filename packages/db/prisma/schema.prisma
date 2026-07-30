@@ -1,5 +1,7 @@
-// Prisma schema — see docs/18-database-architecture.md for full design rationale
-// (relationships, cascade behavior, indexes, soft-delete pattern, audit log).
+// Prisma schema — see docs/18-database-architecture.md for full original
+// design rationale (relationships, cascade behavior, indexes, soft-delete
+// pattern, audit log), and Module M2 (docs/21-implementation-roadmap.md,
+// DECISIONS.md D-017+) for the Business/Lead split introduced here.
 // Future/Post-MVP models are intentionally commented out at the bottom (§10).
 
 datasource db {
@@ -13,10 +15,20 @@ generator client {
 
 // ---------- Enums ----------
 
+// Module M3 (DECISIONS.md D-023+) — six-role taxonomy, replacing the
+// original three (ADMIN/MANAGER/SALES_REP). SUPER_ADMIN/ADMIN/SALES_MANAGER
+// are seniority-ordered within the sales chain of command; DEVELOPER is a
+// lateral technical-access role, not a rung on that same ladder; VIEWER is
+// strictly read-only. The numeric hierarchy used for "at least this
+// seniority" checks lives in code (apps/api/src/common/rbac/role-hierarchy.constants.ts),
+// not here — Postgres enum ordinals are not relied on for authorization logic.
 enum TeamRole {
+  SUPER_ADMIN
   ADMIN
-  MANAGER
-  SALES_REP
+  SALES_MANAGER
+  DEVELOPER
+  SALES_EXECUTIVE
+  VIEWER
 }
 
 enum WebsiteStatusType {
@@ -71,21 +83,177 @@ enum DiscoveryJobStatus {
   FAILED
 }
 
+// Module M4 (DECISIONS.md D-030+) — the rep-facing lead timeline's event
+// vocabulary. Deliberately a DB enum, not a free-text string: unlike
+// `AuditLog.action` (which spans every entity type in the system and must
+// stay open-ended), this vocabulary is closed to what can actually happen
+// to a Lead, so Postgres can reject a typo rather than silently storing an
+// event type no UI knows how to render.
+enum LeadActivityType {
+  CREATED
+  STAGE_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  NOTE_ADDED
+  TAGS_CHANGED
+  DELETED
+}
+
+// Module M5 (DECISIONS.md D-033+) — the provider abstraction's DB-level
+// counterpart. `LocationProvider`/`GooglePlacesProvider` (application code,
+// apps/api/src/common/providers/) is deliberately provider-agnostic; this
+// enum is what actually gets persisted once a provider produces data. Every
+// future provider named in the M5 brief (Yelp/Facebook/Foursquare/CSV
+// Import) is declared now even though only GOOGLE is implemented — cheap
+// type safety, not built machinery (nothing else changes when one ships).
+enum BusinessSourceProvider {
+  GOOGLE
+  YELP
+  FACEBOOK
+  FOURSQUARE
+  CSV_IMPORT
+}
+
+// Module M5 — how `Business.websiteStatus` was last determined. GOOGLE_API
+// covers the common case (Places' own `websiteUri` field settles it, no
+// fetch needed); HEURISTIC_SCAN is Module M1's existing fetch+classify path
+// (website-status.classifier.ts). AI_FALLBACK/MANUAL are reserved
+// attachment points — the AI-assisted classification tier is still
+// deferred (D-005), and no manual-edit feature exists yet.
+enum WebsiteDetectionMethod {
+  GOOGLE_API
+  HEURISTIC_SCAN
+  AI_FALLBACK
+  MANUAL
+}
+
+// Module M5 — mirrors Google Places API (New)'s `businessStatus` field
+// (Yelp/Facebook equivalents map onto the same three states).
+enum BusinessOperatingStatus {
+  OPERATIONAL
+  CLOSED_TEMPORARILY
+  CLOSED_PERMANENTLY
+}
+
+// Module M5 — PARTIAL exists because FR-parity with DiscoveryJobStatus
+// isn't enough here: a sync run processes many businesses, and "some
+// succeeded, some failed" (the per-business try/catch in
+// PlaceSyncRunnerService) is a real, distinct outcome from a clean
+// COMPLETED or a total FAILED (the search itself never returned).
+enum PlaceSyncJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+// Module M6 (DECISIONS.md D-038+) — an analysis is PENDING while the AI
+// call is in flight (fire-and-forget dispatch, same pattern as M1/M5),
+// COMPLETED once a validated brandBrief is persisted, or FAILED once the
+// repair-retry ladder (Doc 21 M6 entry, Req 5) is exhausted without a
+// schema-valid response. There is no PARTIAL here — a single AI call
+// either produces a valid structured brief or it doesn't; unlike
+// PlaceSyncJob there is no per-candidate batch to be partially successful
+// over.
+enum AnalysisStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// Module M6 — the AI provider abstraction's DB-level counterpart, mirroring
+// BusinessSourceProvider's (D-033) forward-declaration rationale: every
+// provider named in the M6 brief (Claude/OpenAI/Gemini/DeepSeek/Local LLM)
+// is declared now even though only CLAUDE is implemented (AnthropicProvider,
+// apps/api's AI_TEXT_PROVIDER binding) — cheap type safety, not built
+// machinery.
+enum AiProviderName {
+  CLAUDE
+  OPENAI
+  GEMINI
+  DEEPSEEK
+  LOCAL_LLM
+}
+
+// Module M7 (DECISIONS.md D-044+) — the Theme Engine's structural output
+// enums. These are purely presentational/structural choices owned by the
+// selected theme (packages/themes) — never the brand-identity fields M6
+// owns (colorPalette/typography/layoutStyle/etc., which flow through
+// unchanged from BusinessAnalysis.brandBrief).
+enum NavigationStyle {
+  TOP_BAR
+  TOP_BAR_STICKY
+  SIDEBAR
+  MINIMAL_HAMBURGER
+}
+
+enum HeroStyle {
+  FULL_BLEED_IMAGE
+  SPLIT_IMAGE_TEXT
+  VIDEO_BACKGROUND
+  CAROUSEL
+  MINIMAL_TEXT
+}
+
+enum CtaStyle {
+  SOLID_BUTTON
+  OUTLINE_BUTTON
+  FLOATING_ACTION
+  BANNER_STRIP
+}
+
+enum CardStyle {
+  ELEVATED_SHADOW
+  FLAT_BORDERED
+  MINIMAL_DIVIDER
+  IMAGE_OVERLAY
+}
+
+enum FooterStyle {
+  MULTI_COLUMN
+  SIMPLE_CENTERED
+  NEWSLETTER_CTA
+}
+
+enum AnimationLevel {
+  NONE
+  SUBTLE
+  MODERATE
+  EXPRESSIVE
+}
+
+enum ImageStyle {
+  PHOTOGRAPHY_REALISTIC
+  ILLUSTRATION
+  ICON_DRIVEN
+  MINIMAL_GRAPHIC
+}
+
 // ---------- Active Models ----------
 
+// Module M3: this is a single-organization employee directory today — every
+// row implicitly belongs to Riznexia's one internal workspace. An
+// `organizationId` FK would attach here if/when multi-org support is ever
+// built; see the commented-out `Organization` model in the FUTURE section
+// below. Not added as a real column now (nothing consumes it) — kept as a
+// documented attachment point, not spec'd-ahead-of-need schema.
 model TeamMember {
   id          String    @id @default(uuid())
   clerkUserId String    @unique @map("clerk_user_id")
   name        String
   email       String    @unique
-  role        TeamRole  @default(SALES_REP)
+  role        TeamRole  @default(SALES_EXECUTIVE)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  discoveryJobs DiscoveryJob[]
-  assignedLeads Lead[]         @relation("AssignedLeads")
-  auditLogs     AuditLog[]
+  discoveryJobs  DiscoveryJob[]
+  assignedLeads  Lead[]         @relation("AssignedLeads")
+  auditLogs      AuditLog[]
+  authoredNotes  LeadNote[]     @relation("AuthoredNotes")
+  leadActivities LeadActivity[] @relation("LeadActivities")
+  placeSyncJobs  PlaceSyncJob[]
 
   @@index([deletedAt])
   @@map("team_members")
@@ -101,52 +269,470 @@ model DiscoveryJob {
   resultsCount Int                @default(0) @map("results_count")
   createdAt    DateTime           @default(now()) @map("created_at")
 
-  leads Lead[]
+  // Doc 22 §5/§6 (M1) — a discovery run finds Businesses; only a subset of
+  // those (none/outdated) go on to get a Lead (M2 §Business split below).
+  businesses Business[]
 
   @@index([createdById])
   @@map("discovery_jobs")
 }
 
-model Lead {
-  id             String            @id @default(uuid())
-  googlePlaceId  String            @unique @map("google_place_id")
-  businessName   String            @map("business_name")
-  category       String
-  city           String
-  address        String
-  placesData     Json              @map("places_data")
-  websiteStatus  WebsiteStatusType @default(NONE) @map("website_status")
-  pipelineStage  PipelineStage     @default(NEW) @map("pipeline_stage")
-  assignedToId   String?           @map("assigned_to")
-  assignedTo     TeamMember?       @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  discoveryJobId String?           @map("discovery_job_id")
-  discoveryJob   DiscoveryJob?     @relation(fields: [discoveryJobId], references: [id], onDelete: SetNull)
-  notes          String?
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
-  deletedAt      DateTime?         @map("deleted_at")
+// Module M2 addition: the "what" — a real-world business and everything we
+// know about its web presence, independent of whether Riznexia is actively
+// pursuing it. Previously these fields lived directly on Lead; splitting
+// them out means a discovered business that turns out to already have a
+// good website (`PRESENT`) is still recorded (for FR-1.7 refresh semantics
+// and future dedupe) without implying a sales pursuit exists for it.
+model Business {
+  id            String            @id @default(uuid())
+  googlePlaceId String            @unique @map("google_place_id")
+  businessName  String            @map("business_name")
+  category      String
+  city          String
+  address       String
+  placesData    Json              @map("places_data")
+  websiteStatus WebsiteStatusType @default(NONE) @map("website_status")
 
-  businessAnalyses BusinessAnalysis[]
-  websites         Website[]
-  proposals        SalesProposal[]
+  // Module M5 (DECISIONS.md D-033+) — promoted from inside the opaque
+  // `placesData` blob to real typed columns (AskUserQuestion resolution
+  // during M5 planning): queryable/filterable, and each provider's
+  // adapter maps its own response shape onto these same fields rather than
+  // downstream code reaching into provider-specific JSON.
+  latitude       Decimal?                @db.Decimal(9, 6)
+  longitude      Decimal?                @db.Decimal(9, 6)
+  phone          String?
+  rating         Float?
+  reviewCount    Int?                    @map("review_count")
+  openingHours   Json?                   @map("opening_hours")
+  photos         Json?
+  businessStatus BusinessOperatingStatus @default(OPERATIONAL) @map("business_status")
+
+  // Module M5 — requested addition. `googleBusinessUrl` is deliberately
+  // named provider-specifically here (unlike the `LocationDetails.profileUrl`
+  // field in the provider-agnostic interface layer, apps/api/src/common/
+  // providers/) because this is the literal DB column the founder asked
+  // for; the interface-to-column mapping happens once, at the sync write
+  // path (PlaceSyncRunnerService/DiscoveryRunnerService).
+  googleBusinessUrl      String?                 @map("google_business_url")
+  // Stamped whenever websiteStatus is (re)determined — distinct from
+  // `updatedAt` (which moves on any field change) and useful because
+  // website checks are cached on a different TTL than general sync.
+  websiteDetectedAt      DateTime?               @map("website_detected_at")
+  websiteDetectionMethod WebsiteDetectionMethod? @map("website_detection_method")
+  // Starts at 1 on create, atomically incremented on every subsequent sync
+  // write (BusinessService.upsertByPlaceId) — lightweight change tracking,
+  // not used for optimistic-concurrency control today.
+  syncVersion            Int                     @default(1) @map("sync_version")
+  sourceProvider         BusinessSourceProvider  @default(GOOGLE) @map("source_provider")
+  lastSyncedAt           DateTime?               @map("last_synced_at")
+  lastSyncJobId          String?                 @map("last_sync_job_id")
+  lastSyncJob            PlaceSyncJob?           @relation(fields: [lastSyncJobId], references: [id], onDelete: SetNull)
+
+  discoveryJobId String?       @map("discovery_job_id")
+  discoveryJob   DiscoveryJob? @relation(fields: [discoveryJobId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  // A Business has at most one Lead — created once, the first time it
+  // qualifies (none/outdated); see BusinessService/LeadsService for the
+  // exact upsert-then-conditionally-create flow this enforces.
+  lead                 Lead?
+  businessAnalyses     BusinessAnalysis[]
+  themeConfigurations  ThemeConfiguration[]
+  layoutConfigurations LayoutConfiguration[]
+
+  @@index([deletedAt])
+  @@index([city])
+  @@index([category])
+  @@index([discoveryJobId])
+  @@index([lastSyncJobId])
+  // Plain btree — helps exact-match/prefix lookups and sorting, not the
+  // `contains`/ILIKE wildcard search GET /leads?q= actually runs (Doc 19
+  // §5). A trigram GIN index would serve that better; deliberately not
+  // added without a live database to verify the syntax against (Doc 22
+  // audit finding #7, DECISIONS.md D-015).
+  @@index([businessName])
+  @@map("businesses")
+}
+
+// Module M5 — a background Google Places (or future-provider) sync run.
+// Deliberately its own model, not a reuse/extension of M1's `DiscoveryJob`:
+// keeps M1's frozen model untouched and avoids scope bleed between two
+// independently-versioned modules, even though both models look similar.
+model PlaceSyncJob {
+  id          String                 @id @default(uuid())
+  createdById String?                @map("created_by")
+  createdBy   TeamMember?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  provider    BusinessSourceProvider @default(GOOGLE)
+
+  // Search params this run was started with — one of city/category or
+  // latitude+longitude+radius is expected, matching LocationProvider's
+  // `search()` contract (apps/api/src/common/providers/location-provider.interface.ts).
+  city         String?
+  category     String?
+  keyword      String?
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  radiusMeters Int?     @map("radius_meters")
+
+  status PlaceSyncJobStatus @default(QUEUED)
+
+  // Module M5 — requested addition. `startedAt`/`finishedAt` mark the
+  // actual processing window (distinct from `createdAt`, which is queue
+  // time). `duration` (seconds) and `successRate` are written once, at
+  // completion, rather than recomputed on every read.
+  startedAt     DateTime? @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+  duration      Int?      @map("duration_seconds")
+  successRate   Float?    @map("success_rate")
+  apiCallsUsed  Int       @default(0) @map("api_calls_used")
+  // Decimal(10,4), matching CostEvent.costUsd — not Float, to avoid
+  // rounding drift on money.
+  estimatedCost Decimal   @default(0) @map("estimated_cost") @db.Decimal(10, 4)
+
+  businessesFound   Int @default(0) @map("businesses_found")
+  businessesCreated Int @default(0) @map("businesses_created")
+  businessesUpdated Int @default(0) @map("businesses_updated")
+  businessesFailed  Int @default(0) @map("businesses_failed")
+
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  businesses Business[]
+
+  @@index([createdById])
+  @@index([status])
+  @@map("place_sync_jobs")
+}
+
+// The "so what" — Riznexia's own pursuit of a Business. Pure pipeline
+// state: no business-data fields live here anymore (Module M2). Doc 19's
+// public `GET /leads` response shape is unchanged — it's now assembled by
+// joining Business, not read directly off this table.
+model Lead {
+  id            String        @id @default(uuid())
+  businessId    String        @unique @map("business_id")
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  pipelineStage PipelineStage @default(NEW) @map("pipeline_stage")
+  assignedToId  String?       @map("assigned_to")
+  assignedTo    TeamMember?   @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  // Module M4 (DECISIONS.md D-031): free-form labels as a Postgres text
+  // array rather than a normalized Tag/LeadTag pair. Covers everything M4
+  // requires — add, remove, filter-by-tag, list-distinct — in one column.
+  // Tag *governance* (rename, merge, colour) would want the normalized
+  // shape; that's not a current requirement, and this project's precedent
+  // is to build what's needed and document the attachment point (D-027).
+  tags          String[]      @default([])
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  websites   Website[]
+  proposals  SalesProposal[]
+  // Module M4: `notes` was a single overwritable String column through M3.
+  // It's now an append-only, authored collection (LeadNote) — "add a note"
+  // is genuinely additive, and a CRM note without an author or timestamp
+  // can't support the timeline this module exists to feed (D-030).
+  leadNotes  LeadNote[]
+  activities LeadActivity[]
 
   @@index([pipelineStage])
   @@index([assignedToId])
   @@index([deletedAt])
+  // GIN — the right index type for `tags @> ARRAY[...]` containment, which
+  // is what the `?tag=` filter compiles to. Unlike the businessName search
+  // (D-015, where the correct index needed unverifiable pg_trgm syntax),
+  // this one is generated by Prisma itself rather than hand-written, so the
+  // SQL is verified by `prisma migrate diff` rather than guessed at.
+  @@index([tags], type: Gin)
   @@map("leads")
 }
 
-model BusinessAnalysis {
-  id               String   @id @default(uuid())
-  leadId           String   @map("lead_id")
-  lead             Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  brandBrief       Json     @map("brand_brief")
-  sentimentSummary Json?    @map("sentiment_summary")
-  aiModelUsed      String   @map("ai_model_used")
-  createdAt        DateTime @default(now()) @map("created_at")
+// Module M4 (DECISIONS.md D-030). Append-only: there is no update or delete
+// path in application code. Editing history away would defeat the point of
+// an internal record of what a rep was told and when.
+model LeadNote {
+  id        String      @id @default(uuid())
+  leadId    String      @map("lead_id")
+  lead      Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Nullable + SET NULL for the same reason AuditLog.actor is: a note's
+  // content stays meaningful after its author is offboarded.
+  authorId  String?     @map("author_id")
+  author    TeamMember? @relation("AuthoredNotes", fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime    @default(now()) @map("created_at")
 
   @@index([leadId, createdAt])
+  @@map("lead_notes")
+}
+
+// Module M4 (DECISIONS.md D-032). The rep-facing timeline — deliberately
+// separate from `audit_log`, which is the security/accountability trail.
+// Different consumers (a sales rep vs. an admin investigating), different
+// content (no IP addresses here), different vocabulary (closed enum vs.
+// open action string). Both are written for a user-initiated write; only
+// this one is written for a pipeline-initiated write (discovery creating a
+// lead has no human actor to audit).
+model LeadActivity {
+  id        String           @id @default(uuid())
+  leadId    String           @map("lead_id")
+  lead      Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actorId   String?          @map("actor_id")
+  actor     TeamMember?      @relation("LeadActivities", fields: [actorId], references: [id], onDelete: SetNull)
+  type      LeadActivityType
+  // Before/after values where relevant, e.g. { "from": "new", "to": "qualified" }.
+  detail    Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt])
+  @@map("lead_activities")
+}
+
+// Module M6 (DECISIONS.md D-037+) — AI Business Analyzer output. Every
+// analysis is a new, immutable row (analysisVersion increments per
+// businessId, never overwritten) — historical analyses are kept, matching
+// the founder's explicit "never overwrite" requirement. `brandBrief` still
+// holds the 19-field structured output as Json (D-038: not promoted to
+// typed columns — the whole value is read together, unlike Business's
+// Google Places fields, which are filtered/sorted on individually).
+// `confidenceScore` is the one output field promoted to a typed column,
+// specifically so a future "show me low-confidence analyses" query doesn't
+// need to parse JSON.
+model BusinessAnalysis {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Historical versioning (Req 3) — starts at 1 per business, never reused;
+  // enforced by the unique constraint below rather than left to caller
+  // discipline.
+  analysisVersion Int @default(1) @map("analysis_version")
+
+  // Prompt versioning (Req 1) — every analysis records exactly which
+  // template produced it. promptHash is a SHA-256 of the rendered template
+  // strings, committed alongside the template module
+  // (packages/ai/src/prompt/business-analysis/) and asserted by a test —
+  // any undocumented template edit fails that test.
+  promptName    String @map("prompt_name")
+  promptVersion String @map("prompt_version")
+  promptHash    String @map("prompt_hash")
+
+  aiProvider AiProviderName @map("ai_provider")
+  aiModel    String         @map("ai_model")
+
+  // AI result cache (Req 2) — SHA-256 of the business fingerprint fields
+  // (name/category/rating/reviewCount/website/phone/address/photos +
+  // Business.syncVersion) at the time this analysis ran. A cache lookup
+  // compares the *current* business's freshly computed hash against the
+  // latest COMPLETED row's inputHash for the same business; a match means
+  // "nothing changed since this analysis ran" and the AI provider is never
+  // called (BusinessAnalysisService.findOrCreate).
+  inputHash String @map("input_hash")
+
+  status AnalysisStatus @default(PENDING)
+
+  // Populated only once status is COMPLETED — the 19-field structured
+  // output (packages/shared-types businessAnalysisOutputSchema). Stays
+  // null while PENDING/FAILED; AI Safety requirement (Req 5): invalid
+  // structured data is never persisted here.
+  brandBrief       Json?  @map("brand_brief")
+  sentimentSummary Json?  @map("sentiment_summary")
+  confidenceScore  Float? @map("confidence_score")
+
+  // AI Safety (Req 5) — populated only on FAILED, after the repair-prompt
+  // retry ladder is exhausted: the raw model text and the Zod validation
+  // errors, so a prompt-quality regression is diagnosable rather than
+  // silently swallowed. rawResponse is truncated to 64KB at the write
+  // boundary (BusinessAnalyzerRunnerService) to bound storage.
+  rawResponse      String? @map("raw_response")
+  validationErrors Json?   @map("validation_errors")
+
+  executionTimeMs Int?      @map("execution_time_ms")
+  completedAt     DateTime? @map("completed_at")
+
+  // Cost tracking (Req 6) — every attempt's tokens are summed across the
+  // full run (initial call + any transient retries + one repair attempt),
+  // not just the final successful call.
+  promptTokens     Int?     @map("prompt_tokens")
+  completionTokens Int?     @map("completion_tokens")
+  totalTokens      Int?     @map("total_tokens")
+  estimatedCost    Decimal? @map("estimated_cost") @db.Decimal(10, 4)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  themeConfigurations  ThemeConfiguration[]
+  layoutConfigurations LayoutConfiguration[]
+
+  // One row per (business, version) — analysisVersion is computed inside a
+  // transaction as MAX(analysisVersion WHERE businessId) + 1; this
+  // constraint is the concurrency backstop, not the primary allocation
+  // mechanism.
+  @@unique([businessId, analysisVersion])
+  @@index([businessId, createdAt])
+  // Cache lookup path (BusinessAnalysisService.findOrCreate): find the
+  // latest COMPLETED row for a businessId and compare inputHash, without a
+  // full table scan.
+  @@index([businessId, inputHash, status])
   @@map("business_analyses")
+}
+
+// Module M7 (DECISIONS.md D-044+) — Theme Engine output. "Themes must
+// adapt to the brand; the brand must never adapt to the theme" (founder's
+// explicit rule, D-045): the brand-identity fields below (industry,
+// layoutStyle, colorPalette, typography) are copied verbatim from the
+// `businessAnalysis` this row is derived from — this model never
+// regenerates or overrides them. Everything else here is the selected
+// theme's own structural output. Versioned like `BusinessAnalysis` — a new
+// `businessAnalysisId` (e.g. after a re-analysis) produces a new,
+// traceable `ThemeConfiguration` row, never an overwrite of the old one.
+model ThemeConfiguration {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  businessAnalysisId String           @map("business_analysis_id")
+  businessAnalysis   BusinessAnalysis @relation(fields: [businessAnalysisId], references: [id], onDelete: Cascade)
+
+  // Historical versioning, same pattern as BusinessAnalysis.analysisVersion
+  // — never overwritten; enforced by the unique constraint below.
+  configVersion Int @default(1) @map("config_version")
+
+  // Theme versioning (founder's explicit requirement) — the exact
+  // ThemeDefinition (packages/themes) this configuration was assembled
+  // from, so a website generated today stays reproducible even after the
+  // theme definition itself is later edited.
+  themeId      String @map("theme_id")
+  themeName    String @map("theme_name")
+  themeVersion String @map("theme_version")
+  themeHash    String @map("theme_hash")
+
+  selectedAt              DateTime @default(now()) @map("selected_at")
+  // The Theme SELECTION ENGINE's own version (rules + scoring logic) —
+  // distinct from themeVersion (which versions the chosen theme's
+  // content). Lets a later rule-engine change be distinguished from a
+  // theme-content change in the audit trail.
+  selectedByEngineVersion String   @map("selected_by_engine_version")
+  compatibilityScore      Float    @map("compatibility_score")
+
+  // ---------- Brand-identity fields — copied verbatim from
+  // businessAnalysis.brandBrief, never regenerated (founder's explicit
+  // "brand must never adapt to the theme" rule). ----------
+  industry     String
+  layoutStyle  String @map("layout_style")
+  colorPalette Json   @map("color_palette")
+  typography   Json
+
+  // ---------- Theme-owned structural fields — from the selected
+  // ThemeDefinition, informed by (but not copied from) BusinessAnalysis's
+  // websiteSections via the compatibility check. ----------
+  componentSet         Json            @map("component_set")
+  navigationStyle      NavigationStyle @map("navigation_style")
+  heroStyle            HeroStyle       @map("hero_style")
+  ctaStyle             CtaStyle        @map("cta_style")
+  cardStyle            CardStyle       @map("card_style")
+  footerStyle          FooterStyle     @map("footer_style")
+  animationLevel       AnimationLevel  @map("animation_level")
+  imageStyle           ImageStyle      @map("image_style")
+  sectionOrder         Json            @map("section_order")
+  accessibilityProfile Json            @map("accessibility_profile")
+  mobilePreferences    Json            @map("mobile_preferences")
+
+  // Module M8.1 (DECISIONS.md D-049) — explicit componentSet-to-sectionOrder
+  // binding, copied verbatim from the selected ThemeDefinition's own
+  // sectionComponentMap. Added because the Layout Generator needs this
+  // link and componentSet/sectionOrder were previously two independent
+  // flat lists with no explicit connection between them. Amended directly
+  // into this not-yet-shipped M7 migration (same rationale as D-048's
+  // ai_recommendation_* columns) rather than a separate migration.
+  sectionComponentMap Json @map("section_component_map")
+
+  // Founder's explicit ranking requirement — every theme that cleared the
+  // minimum compatibility score, sorted descending. rankedThemes[0] is
+  // this row's own selection (themeId/themeName/themeVersion/
+  // compatibilityScore above are that entry, denormalized for query
+  // convenience); the rest are the stored alternatives for a future
+  // manual-override feature (not built — D-045's forward-compatibility
+  // note).
+  rankedThemes Json @map("ranked_themes")
+
+  // Module M7 follow-up (DECISIONS.md D-048) — CostService integration for
+  // the "AI recommends" step (D-046). All nullable: the AI recommendation
+  // is best-effort (D-046's resilience guarantee is unchanged by this
+  // addition) — these stay null when the step was skipped (quota reached)
+  // or failed (provider/transient error), exactly like BusinessAnalysis's
+  // own aiProvider/aiModel/token/cost columns stay unset until a real call
+  // actually completes.
+  aiRecommendationProvider         AiProviderName? @map("ai_recommendation_provider")
+  aiRecommendationModel            String?         @map("ai_recommendation_model")
+  aiRecommendationPromptTokens     Int?            @map("ai_recommendation_prompt_tokens")
+  aiRecommendationCompletionTokens Int?            @map("ai_recommendation_completion_tokens")
+  aiRecommendationTotalTokens      Int?            @map("ai_recommendation_total_tokens")
+  aiRecommendationCostUsd          Decimal?        @map("ai_recommendation_cost_usd") @db.Decimal(10, 4)
+  aiRecommendationExecutionTimeMs  Int?            @map("ai_recommendation_execution_time_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  layoutConfigurations LayoutConfiguration[]
+
+  @@unique([businessId, configVersion])
+  @@index([businessId, createdAt])
+  @@index([businessAnalysisId])
+  @@map("theme_configurations")
+}
+
+// Module M8.1 (DECISIONS.md D-050+) — Layout Generator output. Deterministic:
+// given the same BusinessAnalysis and ThemeConfiguration, generateLayout()
+// (packages/website-generator) always produces the same LayoutConfiguration
+// — no AI call, no randomness. Versioned per business like
+// BusinessAnalysis/ThemeConfiguration (never overwritten); FK'd to both of
+// its inputs for full provenance. Every compound structure (pageStructure,
+// navigation, hero, footer, grid, responsiveRules, ctaPlacements,
+// componentPlaceholders) is stored as Json, same "the whole value is read
+// together" reasoning as ThemeConfiguration's colorPalette/typography
+// (D-038) — nothing here is queried by an individual sub-field.
+model LayoutConfiguration {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  businessAnalysisId String           @map("business_analysis_id")
+  businessAnalysis   BusinessAnalysis @relation(fields: [businessAnalysisId], references: [id], onDelete: Cascade)
+
+  themeConfigurationId String             @map("theme_configuration_id")
+  themeConfiguration   ThemeConfiguration @relation(fields: [themeConfigurationId], references: [id], onDelete: Cascade)
+
+  // Historical versioning, same pattern as BusinessAnalysis.analysisVersion/
+  // ThemeConfiguration.configVersion — never overwritten; enforced by the
+  // unique constraint below.
+  configVersion Int @default(1) @map("config_version")
+
+  // The Layout Generator's own version (derivation rules), distinct from
+  // themeVersion/selectedByEngineVersion — versions this module's algorithm,
+  // not its inputs.
+  layoutEngineVersion String @map("layout_engine_version")
+
+  pageStructure         Json  @map("page_structure")
+  navigation            Json
+  hero                  Json
+  footer                Json
+  // Null unless the source ThemeConfiguration's navigationStyle is
+  // 'sidebar' — none of the 8 M7 themes use it today, but the shape is
+  // forward-compatible.
+  sidebar               Json?
+  grid                  Json
+  responsiveRules       Json  @map("responsive_rules")
+  ctaPlacements         Json  @map("cta_placements")
+  componentPlaceholders Json  @map("component_placeholders")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, configVersion])
+  @@index([businessId, createdAt])
+  @@index([themeConfigurationId])
+  @@map("layout_configurations")
 }
 
 model Website {
@@ -274,6 +860,20 @@ model AuditLog {
 // See docs/16-system-architecture.md §20 (Future Expansion Plan)
 // and docs/18-database-architecture.md §10 for rationale per table.
 // ============================================================
+
+// Module M3 future-readiness note: if multi-org support is ever built,
+// TeamMember gains a required `organizationId` FK to this table and every
+// RBAC/permission check (apps/api/src/common/rbac/) scopes to it. Today
+// there is exactly one implicit organization (Riznexia itself), so this
+// stays commented out rather than adding a column nothing reads yet.
+// model Organization {
+//   id        String   @id @default(uuid())
+//   name      String
+//   slug      String   @unique
+//   createdAt DateTime @default(now()) @map("created_at")
+//
+//   @@map("organizations")
+// }
 
 // model Agency {
 //   id        String   @id @default(uuid())

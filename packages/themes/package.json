@@ -1,0 +1,26 @@
+{
+  "name": "@riznexia/themes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Theme Engine: ThemeProvider abstraction, pluggable theme definitions, compatibility scoring — Doc 20 §7, Doc 21 M7.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@riznexia/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@riznexia/config-eslint": "workspace:*",
+    "@riznexia/config-typescript": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.11.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

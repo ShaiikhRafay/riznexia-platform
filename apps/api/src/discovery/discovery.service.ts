@@ -4,6 +4,7 @@ import type { PrismaClient } from '@riznexia/db';
 import type { CreateDiscoveryJobInput, DiscoveryJob } from '@riznexia/shared-types';
 import { CostService } from '../common/cost/cost.service';
 import { PRISMA_CLIENT } from '../common/database/database.constants';
+import { QuotaExceededException } from '../common/exceptions/app.exception';
 import { toDiscoveryJobResponse } from './dto/discovery-job-response.dto';
 import { DiscoveryRunnerService } from './discovery-runner.service';
 
@@ -27,9 +28,18 @@ export class DiscoveryService {
    * packages/shared-types/src/discovery-job.ts.
    */
   async createJobs(input: CreateDiscoveryJobInput, createdById: string): Promise<DiscoveryJob[]> {
-    await this.costService.assertWithinBudget();
+    // Advisory only — an early, cheap rejection so a rep doesn't wait for a
+    // job to spin up just to immediately fail. The real enforcement is
+    // atomic and happens per-charge inside DiscoveryRunnerService
+    // (CostService.charge) — this check has no bearing on correctness.
+    const { spent, ceiling } = await this.costService.currentSpend();
+    if (spent >= ceiling) {
+      throw new QuotaExceededException(
+        `Monthly cost ceiling of $${ceiling.toFixed(2)} reached ($${spent.toFixed(2)} already spent this month)`,
+      );
+    }
 
-    const jobs = await Promise.all(
+    const jobs = await this.prisma.$transaction(
       input.categories.map((category) =>
         this.prisma.discoveryJob.create({
           data: { city: input.city, category, createdById, status: DiscoveryJobStatus.QUEUED },

@@ -4,7 +4,7 @@ NestJS backend API. Owns all business logic, tenant/role enforcement, database a
 
 ## Current state
 
-Scaffolding only (Doc 21, Module M0): bootstrap, root module, and a `/health` endpoint. No feature modules yet — those land per the module plan in [21-implementation-roadmap.md](../../docs/21-implementation-roadmap.md).
+Beyond initial project setup (Doc 21) — bootstrap, root module, `/health` endpoint — the following feature modules are implemented: **M1 Lead Discovery**, **M2 Database & Core Domain Models**, **M3 Authentication & RBAC**. The rest land per the module plan in [21-implementation-roadmap.md](../../docs/21-implementation-roadmap.md).
 
 ## Run locally
 

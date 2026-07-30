@@ -38,9 +38,9 @@ describe('TeamMemberService', () => {
       const result = service.toRequestUser({
         id: 'id-1',
         clerkUserId: 'user_1',
-        role: PrismaTeamRole.MANAGER,
+        role: PrismaTeamRole.SALES_MANAGER,
       } as never);
-      expect(result).toEqual({ id: 'id-1', clerkUserId: 'user_1', role: 'manager' });
+      expect(result).toEqual({ id: 'id-1', clerkUserId: 'user_1', role: 'sales_manager' });
     });
   });
 
@@ -55,7 +55,7 @@ describe('TeamMemberService', () => {
       expect(prismaMock.teamMember.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { clerkUserId: 'user_1' },
-          create: expect.objectContaining({ role: PrismaTeamRole.SALES_REP }),
+          create: expect.objectContaining({ role: PrismaTeamRole.SALES_EXECUTIVE }),
         }),
       );
     });

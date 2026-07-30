@@ -23,21 +23,21 @@ describe('RolesGuard', () => {
 
   it('allows any authenticated role when no @Roles() decorator is present', () => {
     reflector.getAllAndOverride.mockReturnValue(undefined);
-    expect(guard.canActivate(makeContext('sales_rep'))).toBe(true);
+    expect(guard.canActivate(makeContext('sales_executive'))).toBe(true);
   });
 
   it('allows any authenticated role when @Roles() is empty', () => {
     reflector.getAllAndOverride.mockReturnValue([]);
-    expect(guard.canActivate(makeContext('sales_rep'))).toBe(true);
+    expect(guard.canActivate(makeContext('sales_executive'))).toBe(true);
   });
 
   it('allows a request whose role is in the required list', () => {
-    reflector.getAllAndOverride.mockReturnValue(['admin', 'manager']);
-    expect(guard.canActivate(makeContext('manager'))).toBe(true);
+    reflector.getAllAndOverride.mockReturnValue(['admin', 'sales_manager']);
+    expect(guard.canActivate(makeContext('sales_manager'))).toBe(true);
   });
 
   it('rejects a request whose role is not in the required list', () => {
-    reflector.getAllAndOverride.mockReturnValue(['admin', 'manager']);
-    expect(() => guard.canActivate(makeContext('sales_rep'))).toThrow(ForbiddenRoleException);
+    reflector.getAllAndOverride.mockReturnValue(['admin', 'sales_manager']);
+    expect(() => guard.canActivate(makeContext('sales_executive'))).toThrow(ForbiddenRoleException);
   });
 });

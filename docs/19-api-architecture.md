@@ -2,80 +2,83 @@
 
 **Status:** Draft — deep API design deliverable
 **Role:** Backend Architect pass
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 > **Scope note:** Deepens Doc 07 (API Specifications) into a complete, implementation-ready contract: every resource group requested, pagination/filtering/sorting conventions, a full error code catalog, and an OpenAPI 3.0 specification. No implementation code — this is the contract, not the handlers.
 >
-> **Naming note:** "Projects" (requested) and "Website Generator" (requested) both map to the single `website` resource defined in Doc 18 — a Project *is* a website-generation effort tied to a lead. No separate `Project` entity exists; this avoids two names for one thing across the doc set.
+> **Naming note:** "Projects" (requested) and "Website Generator" (requested) both map to the single `website` resource defined in Doc 18 — a Project _is_ a website-generation effort tied to a lead. No separate `Project` entity exists; this avoids two names for one thing across the doc set.
+>
+> **Doc-sync note (2026-07-29):** `TeamMember.role` enum and every `role`-valued example updated to the six roles implemented in Module M3. `GET /leads`/`GET /leads/:id` (the only resources in this spec actually built so far, Modules M1–M2) are unchanged at the contract level despite the `Business`/`Lead` schema split behind them (DECISIONS.md D-018) — that split is an internal composition detail, not an API change. "Admin/Manager only" annotations updated to name the actual permission each gates (Module M3). See DECISIONS.md D-029.
 
 ---
 
 ## 1. API Design Conventions
 
-| Concern | Convention |
-|---|---|
-| Base path | `/api/v1` |
-| Auth | `Authorization: Bearer <Clerk JWT>` on every route except signed webhooks |
-| Content type | `application/json` throughout |
-| Pagination | Cursor-based: `?cursor=<opaque>&limit=<1-100, default 25>`; response includes `nextCursor` (null when exhausted) |
-| Filtering | Flat query params per resource (e.g. `?stage=qualified&city=Karachi`) — no generic `filter[]` syntax, kept simple since filter sets are small and resource-specific |
-| Sorting | `?sort=field` (ascending) or `?sort=-field` (descending); each endpoint whitelists sortable fields, unlisted fields return `400 INVALID_SORT_FIELD` |
-| Full-text search | `?q=<term>` where noted (Leads, global Search) |
-| Validation | Every request body validated against a zod schema (`packages/shared-types`) before reaching business logic; violations return `400 VALIDATION_ERROR` with per-field detail |
-| Idempotency | `Idempotency-Key` header (client-generated UUID) required on cost-incurring mutations (`generate`, `deploy`, `discover`); replayed key returns the original result, not a duplicate job |
-| Errors | Uniform envelope (§4) |
-| Versioning | Path-based (`/v1`); breaking changes ship as `/v2`, old version deprecated with notice, never mutated in place |
+| Concern          | Convention                                                                                                                                                                              |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path        | `/api/v1`                                                                                                                                                                               |
+| Auth             | `Authorization: Bearer <Clerk JWT>` on every route except signed webhooks                                                                                                               |
+| Content type     | `application/json` throughout                                                                                                                                                           |
+| Pagination       | Cursor-based: `?cursor=<opaque>&limit=<1-100, default 25>`; response includes `nextCursor` (null when exhausted)                                                                        |
+| Filtering        | Flat query params per resource (e.g. `?stage=qualified&city=Karachi`) — no generic `filter[]` syntax, kept simple since filter sets are small and resource-specific                     |
+| Sorting          | `?sort=field` (ascending) or `?sort=-field` (descending); each endpoint whitelists sortable fields, unlisted fields return `400 INVALID_SORT_FIELD`                                     |
+| Full-text search | `?q=<term>` where noted (Leads, global Search)                                                                                                                                          |
+| Validation       | Every request body validated against a zod schema (`packages/shared-types`) before reaching business logic; violations return `400 VALIDATION_ERROR` with per-field detail              |
+| Idempotency      | `Idempotency-Key` header (client-generated UUID) required on cost-incurring mutations (`generate`, `deploy`, `discover`); replayed key returns the original result, not a duplicate job |
+| Errors           | Uniform envelope (§4)                                                                                                                                                                   |
+| Versioning       | Path-based (`/v1`); breaking changes ship as `/v2`, old version deprecated with notice, never mutated in place                                                                          |
 
 ## 2. Resource Groups
 
-| Requested item | API surface |
-|---|---|
-| Authentication | `/me`, Clerk-issued JWT validated on every request (§3) |
-| Businesses | `/leads/{id}/business` (Places data + AI analysis view over a Lead) |
-| Leads | `/leads`, `/discovery-jobs` |
+| Requested item    | API surface                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| Authentication    | `/me`, Clerk-issued JWT validated on every request (§3)                                       |
+| Businesses        | `/leads/{id}/business` (Places data + AI analysis view over a Lead)                           |
+| Leads             | `/leads`, `/discovery-jobs`                                                                   |
 | Website Generator | `/leads/{id}/websites`, `/websites/{id}/generate`, `/websites/{id}/pages/{pageId}/regenerate` |
-| Projects | Same as Website Generator — see naming note above |
-| Deployments | `/websites/{id}/deployments` |
-| AI Agents | `/websites/{id}/generation-jobs`, `/leads/{id}/proposals` |
-| Analytics | `/analytics/*` |
-| Settings | `/settings/profile`, `/team` |
-| Search | `/search` |
+| Projects          | Same as Website Generator — see naming note above                                             |
+| Deployments       | `/websites/{id}/deployments`                                                                  |
+| AI Agents         | `/websites/{id}/generation-jobs`, `/leads/{id}/proposals`                                     |
+| Analytics         | `/analytics/*`                                                                                |
+| Settings          | `/settings/profile`, `/team`                                                                  |
+| Search            | `/search`                                                                                     |
 
 ## 3. Authentication
 
-- Clerk issues the JWT on employee sign-in (domain-restricted, invite-only — Security Strategy §1).
-- Every request carries `Authorization: Bearer <token>`; a global NestJS guard validates the token against Clerk, resolves `{ teamMemberId, role }`, and attaches it to the request context.
+- Clerk issues the JWT on employee sign-in (domain-restricted, invite-only — Security Strategy §1). Clerk remains the sole authentication provider — Module M3 built authorization (RBAC) on top of it, not a replacement (DECISIONS.md D-023).
+- Every request carries `Authorization: Bearer <token>`; a global NestJS guard chain validates the token against Clerk, resolves `{ teamMemberId, role }`, and attaches it to the request context — then applies an exact-role-list check, a role-hierarchy check, and a fine-grained permission check in sequence (Module M3, System Architecture §15).
 - `GET /me` returns the resolved identity — the frontend's source of truth for "who am I / what can I see" (role-gated nav items, Doc 17 §7).
-- No endpoint accepts a client-supplied tenant/role claim — role is always server-resolved from the validated token, never trusted from the request body.
+- No endpoint accepts a client-supplied tenant/role/permission claim — role is always server-resolved from the validated token, never trusted from the request body.
 
 ```
 GET /me
-200 -> { "id": "...", "name": "...", "email": "...", "role": "sales_rep" }
+200 -> { "id": "...", "name": "...", "email": "...", "role": "sales_executive" }
 ```
 
 ## 4. Error Code Catalog
 
 Uniform envelope:
+
 ```json
 { "error": { "code": "LEAD_NOT_FOUND", "message": "Lead not found", "details": {} } }
 ```
 
-| HTTP Status | Code | Meaning |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | Request body/query failed schema validation; `details` lists per-field errors |
-| 400 | `INVALID_SORT_FIELD` | `sort` param references a non-whitelisted field |
-| 401 | `UNAUTHENTICATED` | Missing/invalid/expired JWT |
-| 403 | `FORBIDDEN` | Authenticated but role lacks permission for this action |
-| 404 | `RESOURCE_NOT_FOUND` | Generic fallback; specific resources use e.g. `LEAD_NOT_FOUND`, `WEBSITE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `TEAM_MEMBER_NOT_FOUND` |
-| 409 | `DUPLICATE_LEAD` | `google_place_id` already exists (discovery dedupe, Doc 18 §5) |
-| 409 | `IDEMPOTENCY_KEY_CONFLICT` | Same key reused with a different request body |
-| 422 | `GENERATION_NOT_ALLOWED_STAGE` | Generation attempted on a lead below `qualified` (PRD FR-4.1) |
-| 422 | `WEBSITE_NOT_READY` | Deployment attempted before generation reaches `ready_for_review` |
-| 429 | `RATE_LIMITED` | Baseline per-IP/per-user rate limit exceeded |
-| 429 | `QUOTA_EXCEEDED` | Per-rep or org-wide cost/usage ceiling reached (BRD BR-7, $300/month default) |
-| 500 | `INTERNAL_ERROR` | Unhandled server fault |
-| 502 | `UPSTREAM_PROVIDER_ERROR` | Google Places / Claude / image-gen / GitHub / Vercel call failed after retries |
-| 503 | `SERVICE_UNAVAILABLE` | Planned maintenance or dependency outage |
+| HTTP Status | Code                           | Meaning                                                                                                                              |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 400         | `VALIDATION_ERROR`             | Request body/query failed schema validation; `details` lists per-field errors                                                        |
+| 400         | `INVALID_SORT_FIELD`           | `sort` param references a non-whitelisted field                                                                                      |
+| 401         | `UNAUTHENTICATED`              | Missing/invalid/expired JWT                                                                                                          |
+| 403         | `FORBIDDEN`                    | Authenticated but role lacks permission for this action                                                                              |
+| 404         | `RESOURCE_NOT_FOUND`           | Generic fallback; specific resources use e.g. `LEAD_NOT_FOUND`, `WEBSITE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `TEAM_MEMBER_NOT_FOUND` |
+| 409         | `DUPLICATE_LEAD`               | `google_place_id` already exists (discovery dedupe, Doc 18 §5)                                                                       |
+| 409         | `IDEMPOTENCY_KEY_CONFLICT`     | Same key reused with a different request body                                                                                        |
+| 422         | `GENERATION_NOT_ALLOWED_STAGE` | Generation attempted on a lead below `qualified` (PRD FR-4.1)                                                                        |
+| 422         | `WEBSITE_NOT_READY`            | Deployment attempted before generation reaches `ready_for_review`                                                                    |
+| 429         | `RATE_LIMITED`                 | Baseline per-IP/per-user rate limit exceeded                                                                                         |
+| 429         | `QUOTA_EXCEEDED`               | Per-rep or org-wide cost/usage ceiling reached (BRD BR-7, $300/month default)                                                        |
+| 500         | `INTERNAL_ERROR`               | Unhandled server fault                                                                                                               |
+| 502         | `UPSTREAM_PROVIDER_ERROR`      | Google Places / Claude / image-gen / GitHub / Vercel call failed after retries                                                       |
+| 503         | `SERVICE_UNAVAILABLE`          | Planned maintenance or dependency outage                                                                                             |
 
 ## 5. OpenAPI 3.0 Specification
 
@@ -83,7 +86,7 @@ Uniform envelope:
 openapi: 3.0.3
 info:
   title: Riznexia AI Sales Platform API
-  version: "1.0"
+  version: '1.0'
   description: >
     Internal API for Riznexia employees. Discovers businesses, manages the
     sales pipeline, generates AI-driven demo websites, deploys them, and
@@ -178,7 +181,11 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         email: { type: string, format: email }
-        role: { type: string, enum: [admin, manager, sales_rep] }
+        role:
+          {
+            type: string,
+            enum: [super_admin, admin, sales_manager, developer, sales_executive, viewer],
+          }
 
     Lead:
       type: object
@@ -366,7 +373,12 @@ paths:
         - { name: city, in: query, schema: { type: string } }
         - { name: category, in: query, schema: { type: string } }
         - { name: assignedTo, in: query, schema: { type: string, format: uuid } }
-        - { name: q, in: query, schema: { type: string }, description: "Free-text search over business name" }
+        - {
+            name: q,
+            in: query,
+            schema: { type: string },
+            description: 'Free-text search over business name',
+          }
       responses:
         '200':
           description: OK
@@ -384,7 +396,11 @@ paths:
       tags: [Leads]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Lead' } } } }
+        '200':
+          {
+            description: OK,
+            content: { application/json: { schema: { $ref: '#/components/schemas/Lead' } } },
+          }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       summary: Update lead (stage, assignment, notes)
@@ -400,7 +416,11 @@ paths:
                 assignedTo: { type: string, format: uuid, nullable: true }
                 notes: { type: string }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Lead' } } } }
+        '200':
+          {
+            description: OK,
+            content: { application/json: { schema: { $ref: '#/components/schemas/Lead' } } },
+          }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
@@ -417,7 +437,12 @@ paths:
       tags: [Businesses]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessDetail' } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/BusinessDetail' } } },
+          }
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       summary: Trigger (re)analysis
@@ -432,7 +457,8 @@ paths:
     post:
       summary: Create a website generation project
       tags: [Website Generator, Projects]
-      parameters: [{ name: leadId, in: path, required: true, schema: { type: string, format: uuid } }]
+      parameters:
+        [{ name: leadId, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         content:
           application/json:
@@ -441,14 +467,27 @@ paths:
               required: [templateKey]
               properties: { templateKey: { type: string } }
       responses:
-        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Website' } } } }
+        '201':
+          {
+            description: Created,
+            content: { application/json: { schema: { $ref: '#/components/schemas/Website' } } },
+          }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
     get:
       summary: List websites for a lead
       tags: [Website Generator, Projects]
-      parameters: [{ name: leadId, in: path, required: true, schema: { type: string, format: uuid } }]
+      parameters:
+        [{ name: leadId, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Website' } } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              {
+                application/json:
+                  { schema: { type: array, items: { $ref: '#/components/schemas/Website' } } },
+              },
+          }
 
   /websites/{id}:
     get:
@@ -456,7 +495,11 @@ paths:
       tags: [Website Generator, Projects]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Website' } } } }
+        '200':
+          {
+            description: OK,
+            content: { application/json: { schema: { $ref: '#/components/schemas/Website' } } },
+          }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /websites/{id}/generate:
@@ -477,7 +520,17 @@ paths:
       tags: [AI Agents]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/GenerationJob' } } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              {
+                application/json:
+                  {
+                    schema: { type: array, items: { $ref: '#/components/schemas/GenerationJob' } },
+                  },
+              },
+          }
 
   /websites/{id}/pages/{pageId}/regenerate:
     post:
@@ -511,7 +564,15 @@ paths:
       tags: [Deployments]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Deployment' } } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              {
+                application/json:
+                  { schema: { type: array, items: { $ref: '#/components/schemas/Deployment' } } },
+              },
+          }
 
   /leads/{id}/proposals:
     post:
@@ -519,13 +580,28 @@ paths:
       tags: [AI Agents]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/SalesProposal' } } } }
+        '201':
+          {
+            description: Created,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/SalesProposal' } } },
+          }
     get:
       summary: List proposals for a lead
       tags: [AI Agents]
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/SalesProposal' } } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              {
+                application/json:
+                  {
+                    schema: { type: array, items: { $ref: '#/components/schemas/SalesProposal' } },
+                  },
+              },
+          }
 
   /leads/{id}/proposals/{proposalId}:
     patch:
@@ -543,14 +619,24 @@ paths:
                 draftContent: { type: string }
                 status: { type: string, enum: [draft, edited, sent_manually] }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SalesProposal' } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/SalesProposal' } } },
+          }
 
   /analytics/overview:
     get:
       summary: North-star and BRD success-criteria metrics
       tags: [Analytics]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AnalyticsOverview' } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/AnalyticsOverview' } } },
+          }
 
   /analytics/pipeline:
     get:
@@ -561,7 +647,7 @@ paths:
 
   /analytics/reps:
     get:
-      summary: Per-rep leaderboard (Manager/Admin only)
+      summary: Per-rep leaderboard (`cost:view` permission — Super Admin/Admin/Sales Manager)
       tags: [Analytics]
       responses:
         '200': { description: OK }
@@ -569,7 +655,7 @@ paths:
 
   /analytics/cost:
     get:
-      summary: Cost breakdown by type vs. ceiling (Manager/Admin only)
+      summary: Cost breakdown by type vs. ceiling (`cost:view` permission — Super Admin/Admin/Sales Manager)
       tags: [Analytics]
       parameters:
         - { name: period, in: query, schema: { type: string, default: current } }
@@ -597,13 +683,21 @@ paths:
 
   /team:
     get:
-      summary: List team members (Manager/Admin only)
+      summary: List team members (`team:manage` permission — Super Admin/Admin/Sales Manager)
       tags: [Settings]
       responses:
-        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TeamMember' } } } } }
+        '200':
+          {
+            description: OK,
+            content:
+              {
+                application/json:
+                  { schema: { type: array, items: { $ref: '#/components/schemas/TeamMember' } } },
+              },
+          }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      summary: Invite a team member (Manager/Admin only)
+      summary: Invite a team member (`team:manage` permission — Super Admin/Admin/Sales Manager)
       tags: [Settings]
       requestBody:
         content:
@@ -613,7 +707,11 @@ paths:
               required: [email, role]
               properties:
                 email: { type: string, format: email }
-                role: { type: string, enum: [admin, manager, sales_rep] }
+                role:
+                  {
+                    type: string,
+                    enum: [super_admin, admin, sales_manager, developer, sales_executive, viewer],
+                  }
       responses:
         '201': { description: Invited }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -628,7 +726,14 @@ paths:
           application/json:
             schema:
               type: object
-              properties: { role: { type: string, enum: [admin, manager, sales_rep] } }
+              properties:
+                {
+                  role:
+                    {
+                      type: string,
+                      enum: [super_admin, admin, sales_manager, developer, sales_executive, viewer],
+                    },
+                }
       responses:
         '200': { description: OK }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -667,4 +772,5 @@ paths:
 ```
 
 ---
+
 **API architecture complete — deepens Doc 07, feeds directly into Phase 4 (Backend). Still awaiting your go-ahead for Phase 4 itself.**

@@ -1,6 +1,12 @@
 {
   "extends": "@riznexia/config-typescript/base.json",
   "compilerOptions": {
+    // Module M6 (DECISIONS.md D-042) — this package gained a build step
+    // (was source-only through M0-M5): CommonJS/Node module resolution,
+    // same reasoning as packages/shared-types/tsconfig.json, since it's
+    // require()'d by apps/api's plain Node runtime rather than bundled.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "./dist",
     "rootDir": "./src"
   },
