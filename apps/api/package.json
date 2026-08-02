@@ -27,6 +27,7 @@
     "@riznexia/shared-types": "workspace:*",
     "@riznexia/themes": "workspace:*",
     "@riznexia/website-generator": "workspace:*",
+    "@riznexia/website-preview": "workspace:*",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
     "svix": "^1.42.0",

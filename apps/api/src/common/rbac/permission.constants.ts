@@ -30,6 +30,19 @@ import type { TeamRole } from '@riznexia/shared-types';
 // Module M8.1 (DECISIONS.md D-050+) — `layout:generate` follows the same
 // dedicated-permission precedent as `theme:select`: a real, independently-
 // assignable capability, not folded into `theme:select`. Same role set.
+// Module M8.2 (DECISIONS.md D-055+) — `component:generate` follows the
+// identical precedent. Same role set again.
+// Module M8.3 (DECISIONS.md D-061+) — `content:bind` names the verb this
+// module actually performs (binding real data, never generating), same
+// dedicated-permission precedent, same role set.
+// Module M8.4 (DECISIONS.md D-068+) — `website:assemble` follows the
+// identical precedent one more time. Same role set again.
+// Module M9 (DECISIONS.md D-075+) — `website:preview` is its own
+// dedicated permission (founder's explicit instruction: do not reuse
+// `website:assemble` — previewing/validating a website is a distinct
+// capability from generating one, and the founder wants it independently
+// assignable/revocable for future client-approval, internal-QA, and
+// review-workflow features). Same role set again.
 export const PERMISSIONS = [
   'leads:read',
   'leads:write',
@@ -39,6 +52,10 @@ export const PERMISSIONS = [
   'business:analyze',
   'theme:select',
   'layout:generate',
+  'component:generate',
+  'content:bind',
+  'website:assemble',
+  'website:preview',
   'team:manage',
   'cost:view',
   'system:debug',
@@ -60,6 +77,10 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'business:analyze',
     'theme:select',
     'layout:generate',
+    'component:generate',
+    'content:bind',
+    'website:assemble',
+    'website:preview',
     'team:manage',
     'cost:view',
     'system:debug',
@@ -73,6 +94,10 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'business:analyze',
     'theme:select',
     'layout:generate',
+    'component:generate',
+    'content:bind',
+    'website:assemble',
+    'website:preview',
     'team:manage',
     'cost:view',
   ],
@@ -84,6 +109,10 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'business:analyze',
     'theme:select',
     'layout:generate',
+    'component:generate',
+    'content:bind',
+    'website:assemble',
+    'website:preview',
   ],
   developer: ['leads:read', 'discovery:read', 'system:debug'],
   // Strictly read-only, and deliberately excludes `cost:view` — Doc 15's

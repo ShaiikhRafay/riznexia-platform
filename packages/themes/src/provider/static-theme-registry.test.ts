@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StaticThemeRegistry } from './static-theme-registry';
+import { COMPONENT_TYPE_REGISTRY } from './component-type-registry';
 
 const EXPECTED_THEME_IDS = [
   'restaurant',
@@ -58,6 +59,20 @@ describe('StaticThemeRegistry', () => {
       const assignedComponents = Object.values(sectionComponentMap).flat();
       expect(assignedComponents.sort()).toEqual([...componentSet].sort());
       expect(new Set(assignedComponents).size).toBe(assignedComponents.length);
+    }
+  });
+
+  // Module M8.2 (DECISIONS.md D-055) — COMPONENT_TYPE_REGISTRY is the
+  // closed taxonomy every componentId must classify onto for "only
+  // supported components may be generated" to be enforceable. This test
+  // is the registry-side half of that guarantee: nothing shippable in
+  // packages/themes references a componentId the generator can't classify.
+  it("every registered theme's componentSet entries are classified in COMPONENT_TYPE_REGISTRY", () => {
+    for (const theme of registry.listThemes()) {
+      const unclassified = theme.content.componentSet.filter(
+        (componentId) => !(componentId in COMPONENT_TYPE_REGISTRY),
+      );
+      expect(unclassified).toEqual([]);
     }
   });
 

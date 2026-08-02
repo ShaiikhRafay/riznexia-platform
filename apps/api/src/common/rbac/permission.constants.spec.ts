@@ -69,6 +69,19 @@ describe('permission.constants', () => {
     expect(rolesWithThemeSelect.sort()).toEqual(rolesWithBusinessAnalyze.sort());
   });
 
+  // Module M9 (DECISIONS.md D-075) — website:preview is its own dedicated
+  // permission, not a reuse of website:assemble, but granted to the same
+  // role set.
+  it('grants website:preview to the same roles as website:assemble', () => {
+    const rolesWithAssemble = TEAM_ROLES.filter((role) =>
+      roleHasPermission(role, 'website:assemble'),
+    );
+    const rolesWithPreview = TEAM_ROLES.filter((role) =>
+      roleHasPermission(role, 'website:preview'),
+    );
+    expect(rolesWithPreview.sort()).toEqual(rolesWithAssemble.sort());
+  });
+
   it('gives developer system:debug but not lead-mutation permissions', () => {
     expect(roleHasPermission('developer', 'system:debug')).toBe(true);
     expect(roleHasPermission('developer', 'leads:write')).toBe(false);

@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles only — every color/font/radius/spacing value comes from the
+   CSS custom properties defined in ./theme-tokens.css (generated per
+   business from Module M8.2's ThemeTokens). This file never changes
+   between businesses. */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading;
+  }
+
+  /* Respects the reducedMotionSupport accessibility requirement every M7
+     theme carries (accessibilityProfile.reducedMotionSupport) — Framer
+     Motion components in components/sections/ additionally check
+     prefers-reduced-motion via useReducedMotion(), this is the CSS-level
+     backstop for anything animated with plain CSS transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-background;
+  }
+}

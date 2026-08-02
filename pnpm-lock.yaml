@@ -65,6 +65,9 @@ importers:
       '@riznexia/website-generator':
         specifier: workspace:*
         version: link:../../packages/website-generator
+      '@riznexia/website-preview':
+        specifier: workspace:*
+        version: link:../../packages/website-preview
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -393,6 +396,12 @@ importers:
       '@riznexia/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+      '@riznexia/themes':
+        specifier: workspace:*
+        version: link:../themes
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
     devDependencies:
       '@riznexia/config-eslint':
         specifier: workspace:*
@@ -406,9 +415,34 @@ importers:
       eslint:
         specifier: ^9.11.0
         version: 9.39.5(jiti@1.21.7)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(terser@5.49.0)
+
+  packages/website-preview:
+    dependencies:
+      '@riznexia/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+    devDependencies:
+      '@riznexia/config-eslint':
+        specifier: workspace:*
+        version: link:../config-eslint
+      '@riznexia/config-typescript':
+        specifier: workspace:*
+        version: link:../config-typescript
+      '@riznexia/website-generator':
+        specifier: workspace:*
+        version: link:../website-generator
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      eslint:
+        specifier: ^9.11.0
+        version: 9.39.5(jiti@1.21.7)
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(terser@5.49.0)

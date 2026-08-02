@@ -8,12 +8,16 @@ import { DatabaseModule } from './common/database/database.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { RbacModule } from './common/rbac/rbac.module';
 import { BusinessAnalysisModule } from './business-analysis/business-analysis.module';
+import { ComponentEngineModule } from './component-engine/component-engine.module';
+import { ContentEngineModule } from './content-engine/content-engine.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { HealthModule } from './health/health.module';
 import { LayoutEngineModule } from './layout-engine/layout-engine.module';
 import { LeadsModule } from './leads/leads.module';
 import { PlaceSyncModule } from './place-sync/place-sync.module';
 import { ThemeSelectionModule } from './theme-engine/theme-selection.module';
+import { WebsiteAssemblyModule } from './website-assembly/website-assembly.module';
+import { WebsitePreviewModule } from './website-preview/website-preview.module';
 
 // Root module. Feature modules beyond auth/discovery/leads (Doc 16 §3
 // bounded contexts: generation, deployment, pitch, team) are added here
@@ -43,6 +47,10 @@ import { ThemeSelectionModule } from './theme-engine/theme-selection.module';
     BusinessAnalysisModule,
     ThemeSelectionModule,
     LayoutEngineModule,
+    ComponentEngineModule,
+    ContentEngineModule,
+    WebsiteAssemblyModule,
+    WebsitePreviewModule,
   ],
 })
 export class AppModule {}

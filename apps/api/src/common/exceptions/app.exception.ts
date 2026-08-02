@@ -151,3 +151,59 @@ export class ThemeConfigurationNotFoundException extends AppException {
     super('THEME_CONFIGURATION_NOT_FOUND', message, HttpStatus.NOT_FOUND);
   }
 }
+
+// ---------- Module M8.2 — Component Generator (Doc 19 §4) ----------
+
+// The Component Generator has a hard dependency on a persisted
+// LayoutConfiguration (its third required input, alongside BusinessAnalysis
+// and ThemeConfiguration) — mirrors ThemeConfigurationNotFoundException's
+// role for M8.1's own hard dependency on M7.
+export class LayoutConfigurationNotFoundException extends AppException {
+  constructor(
+    message = 'No layout configuration exists yet for this lead — run layout generation (POST /leads/:id/layout) before component generation',
+  ) {
+    super('LAYOUT_CONFIGURATION_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M8.3 — Content Binding (Doc 19 §4) ----------
+
+// Content Binding has a hard dependency on a persisted ComponentManifest
+// (its fourth required input, alongside BusinessAnalysis/ThemeConfiguration/
+// LayoutConfiguration) — mirrors LayoutConfigurationNotFoundException's
+// role for M8.2's own hard dependency on M8.1.
+export class ComponentManifestNotFoundException extends AppException {
+  constructor(
+    message = 'No component manifest exists yet for this lead — run component generation (POST /leads/:id/components) before content binding',
+  ) {
+    super('COMPONENT_MANIFEST_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M8.4 — Website Assembly (Doc 19 §4) ----------
+
+// Website Assembly has a hard dependency on a persisted ContentManifest
+// (its fifth required input, alongside BusinessAnalysis/ThemeConfiguration/
+// LayoutConfiguration/ComponentManifest) — mirrors ComponentManifestNotFoundException's
+// role for M8.3's own hard dependency on M8.2.
+export class ContentManifestNotFoundException extends AppException {
+  constructor(
+    message = 'No content manifest exists yet for this lead — run content binding (POST /leads/:id/content) before website assembly',
+  ) {
+    super('CONTENT_MANIFEST_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// ---------- Module M9 — Website Preview (Doc 19 §4) ----------
+
+// Website Preview has a hard dependency on a persisted GeneratedWebsite
+// (its primary input, alongside BusinessAnalysis/ThemeConfiguration) —
+// mirrors ContentManifestNotFoundException's role for M8.4's own hard
+// dependency on M8.3.
+export class GeneratedWebsiteNotFoundException extends AppException {
+  constructor(
+    message = 'No generated website exists yet for this lead — run website assembly (POST /leads/:id/website) before previewing it',
+  ) {
+    super('GENERATED_WEBSITE_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}

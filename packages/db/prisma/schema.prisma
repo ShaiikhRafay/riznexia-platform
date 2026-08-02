@@ -337,10 +337,16 @@ model Business {
   // A Business has at most one Lead — created once, the first time it
   // qualifies (none/outdated); see BusinessService/LeadsService for the
   // exact upsert-then-conditionally-create flow this enforces.
-  lead                 Lead?
-  businessAnalyses     BusinessAnalysis[]
-  themeConfigurations  ThemeConfiguration[]
-  layoutConfigurations LayoutConfiguration[]
+  lead                    Lead?
+  businessAnalyses        BusinessAnalysis[]
+  themeConfigurations     ThemeConfiguration[]
+  layoutConfigurations    LayoutConfiguration[]
+  componentManifests      ComponentManifest[]
+  contentManifests        ContentManifest[]
+  generatedWebsites       GeneratedWebsite[]
+  websitePreviews         WebsitePreview[]
+  previewReports          PreviewReport[]
+  publishReadinessReports PublishReadinessReport[]
 
   @@index([deletedAt])
   @@index([city])
@@ -563,6 +569,9 @@ model BusinessAnalysis {
 
   themeConfigurations  ThemeConfiguration[]
   layoutConfigurations LayoutConfiguration[]
+  componentManifests   ComponentManifest[]
+  contentManifests     ContentManifest[]
+  generatedWebsites    GeneratedWebsite[]
 
   // One row per (business, version) — analysisVersion is computed inside a
   // transaction as MAX(analysisVersion WHERE businessId) + 1; this
@@ -675,6 +684,9 @@ model ThemeConfiguration {
   createdAt DateTime @default(now()) @map("created_at")
 
   layoutConfigurations LayoutConfiguration[]
+  componentManifests   ComponentManifest[]
+  contentManifests     ContentManifest[]
+  generatedWebsites    GeneratedWebsite[]
 
   @@unique([businessId, configVersion])
   @@index([businessId, createdAt])
@@ -729,10 +741,279 @@ model LayoutConfiguration {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  componentManifests ComponentManifest[]
+  contentManifests   ContentManifest[]
+  generatedWebsites  GeneratedWebsite[]
+
   @@unique([businessId, configVersion])
   @@index([businessId, createdAt])
   @@index([themeConfigurationId])
   @@map("layout_configurations")
+}
+
+// Module M8.2 (DECISIONS.md D-055+) — Component Generator output.
+// Deterministic: given the same BusinessAnalysis, ThemeConfiguration, and
+// LayoutConfiguration, generateComponentManifest() (packages/website-generator)
+// always produces the same ComponentManifest — no AI call, no randomness.
+// Versioned per business like every prior M6-M8 output (never overwritten);
+// FK'd to all three inputs for full provenance. `themeTokens` and
+// `components` are Json — same "the whole value is read together"
+// reasoning as every other compound-structure column in this schema
+// (ThemeConfiguration.colorPalette, LayoutConfiguration.pageStructure).
+model ComponentManifest {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  businessAnalysisId String           @map("business_analysis_id")
+  businessAnalysis   BusinessAnalysis @relation(fields: [businessAnalysisId], references: [id], onDelete: Cascade)
+
+  themeConfigurationId String             @map("theme_configuration_id")
+  themeConfiguration   ThemeConfiguration @relation(fields: [themeConfigurationId], references: [id], onDelete: Cascade)
+
+  layoutConfigurationId String              @map("layout_configuration_id")
+  layoutConfiguration   LayoutConfiguration @relation(fields: [layoutConfigurationId], references: [id], onDelete: Cascade)
+
+  // Historical versioning, same pattern as every prior M6-M8 output —
+  // never overwritten; enforced by the unique constraint below.
+  configVersion Int @default(1) @map("config_version")
+
+  // The Component Generator's own version (derivation rules), distinct
+  // from layoutEngineVersion/themeVersion/selectedByEngineVersion —
+  // versions this module's algorithm, not its inputs.
+  componentEngineVersion String @map("component_engine_version")
+
+  themeTokens Json @map("theme_tokens")
+  components  Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  contentManifests  ContentManifest[]
+  generatedWebsites GeneratedWebsite[]
+
+  @@unique([businessId, configVersion])
+  @@index([businessId, createdAt])
+  @@index([layoutConfigurationId])
+  @@map("component_manifests")
+}
+
+// Module M8.3 (DECISIONS.md D-061+) — Content Binding output. Deterministic:
+// given the same BusinessAnalysis, ThemeConfiguration, LayoutConfiguration,
+// and ComponentManifest, generateContentManifest() (packages/website-generator)
+// always produces the same ContentManifest — no AI call, no prompt
+// execution, no content regeneration. Versioned per business like every
+// prior M6-M8 output (never overwritten); FK'd to all four upstream
+// artifacts for full provenance. `componentContent`/`unresolvedBindings`/
+// `seoMetadata`/`structuredData` are Json — same "the whole value is read
+// together" reasoning as every other compound-structure column in this
+// schema; every value inside carries its own `source` string
+// (founder's explicit "traceable to origin" requirement), enforced at the
+// application layer (Zod), not by a DB constraint.
+model ContentManifest {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  businessAnalysisId String           @map("business_analysis_id")
+  businessAnalysis   BusinessAnalysis @relation(fields: [businessAnalysisId], references: [id], onDelete: Cascade)
+
+  themeConfigurationId String             @map("theme_configuration_id")
+  themeConfiguration   ThemeConfiguration @relation(fields: [themeConfigurationId], references: [id], onDelete: Cascade)
+
+  layoutConfigurationId String              @map("layout_configuration_id")
+  layoutConfiguration   LayoutConfiguration @relation(fields: [layoutConfigurationId], references: [id], onDelete: Cascade)
+
+  componentManifestId String            @map("component_manifest_id")
+  componentManifest   ComponentManifest @relation(fields: [componentManifestId], references: [id], onDelete: Cascade)
+
+  // Historical versioning, same pattern as every prior M6-M8 output —
+  // never overwritten; enforced by the unique constraint below.
+  configVersion Int @default(1) @map("config_version")
+
+  // The Content Binder's own version (binding rules), distinct from
+  // componentEngineVersion/layoutEngineVersion/themeVersion — versions
+  // this module's algorithm, not its four inputs.
+  contentEngineVersion String @map("content_engine_version")
+
+  componentContent   Json @map("component_content")
+  unresolvedBindings Json @map("unresolved_bindings")
+  seoMetadata        Json @map("seo_metadata")
+  structuredData     Json @map("structured_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  generatedWebsites GeneratedWebsite[]
+
+  @@unique([businessId, configVersion])
+  @@index([businessId, createdAt])
+  @@index([componentManifestId])
+  @@map("content_manifests")
+}
+
+// Module M8.4 (DECISIONS.md D-068+) — Website Assembly output. Deterministic:
+// given the same ThemeConfiguration, LayoutConfiguration, ComponentManifest,
+// and ContentManifest, assembleWebsite() (packages/website-generator)
+// always produces the same file list — no AI call, no randomness, no
+// regeneration of any upstream layout/component/content decision, only
+// assembly. FK'd to all five upstream M6-M8.3 artifacts for full
+// provenance, same discipline as every other M8.x output, even though the
+// generator function itself only reads four of them directly (businessName
+// and every other BusinessAnalysis-derived fact were already carried
+// through into ComponentManifest/ContentManifest by the time this phase
+// runs). `files` is the entire generated Next.js project as a flat
+// {path, content}[] array — same "the whole value is read/written
+// together" reasoning as every other compound Json column in this schema;
+// there is no separate object-storage/S3 infrastructure anywhere in this
+// stack, so the project's full source lives here.
+model GeneratedWebsite {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  businessAnalysisId String           @map("business_analysis_id")
+  businessAnalysis   BusinessAnalysis @relation(fields: [businessAnalysisId], references: [id], onDelete: Cascade)
+
+  themeConfigurationId String             @map("theme_configuration_id")
+  themeConfiguration   ThemeConfiguration @relation(fields: [themeConfigurationId], references: [id], onDelete: Cascade)
+
+  layoutConfigurationId String              @map("layout_configuration_id")
+  layoutConfiguration   LayoutConfiguration @relation(fields: [layoutConfigurationId], references: [id], onDelete: Cascade)
+
+  componentManifestId String            @map("component_manifest_id")
+  componentManifest   ComponentManifest @relation(fields: [componentManifestId], references: [id], onDelete: Cascade)
+
+  contentManifestId String          @map("content_manifest_id")
+  contentManifest   ContentManifest @relation(fields: [contentManifestId], references: [id], onDelete: Cascade)
+
+  // Historical versioning, same pattern as every prior M6-M8 output —
+  // never overwritten; enforced by the unique constraint below.
+  configVersion Int @default(1) @map("config_version")
+
+  // The Website Assembler's own version (which files it generates, how it
+  // merges the static template with per-business data) — distinct from
+  // contentEngineVersion/componentEngineVersion/layoutEngineVersion/
+  // themeVersion, which version its upstream inputs.
+  assemblyEngineVersion String @map("assembly_engine_version")
+
+  // {path: string, content: string}[] — the full generated Next.js
+  // project, sorted by path for determinism (static-template-loader.ts).
+  files Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  websitePreviews         WebsitePreview[]
+  previewReports          PreviewReport[]
+  publishReadinessReports PublishReadinessReport[]
+
+  @@unique([businessId, configVersion])
+  @@index([businessId, createdAt])
+  @@index([contentManifestId])
+  @@map("generated_websites")
+}
+
+// Module M9 (DECISIONS.md D-075+) — Website Preview. Read-only: never
+// regenerates or modifies GeneratedWebsite (founder's Decision 1). Three
+// independent artifacts — WebsitePreview, PreviewReport,
+// PublishReadinessReport — each its own model, each its own versioned
+// sequence, none FK'd to the others (founder's Decision 1/"all reports
+// must be generated independently" — PublishReadinessReport is computed
+// from a freshly-run rule list, not by reading a persisted PreviewReport
+// row, so it never depends on one existing first). Each carries the same
+// metadata envelope (previewVersion/generatedWebsiteVersion/
+// validationVersion/generatedByModuleVersion/createdAt) so any one of
+// the three is self-describing on its own.
+model WebsitePreview {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  generatedWebsiteId String           @map("generated_website_id")
+  generatedWebsite   GeneratedWebsite @relation(fields: [generatedWebsiteId], references: [id], onDelete: Cascade)
+
+  previewVersion           Int    @default(1) @map("preview_version")
+  generatedWebsiteVersion  Int    @map("generated_website_version")
+  validationVersion        String @map("validation_version")
+  generatedByModuleVersion String @map("generated_by_module_version")
+
+  businessName  String @map("business_name")
+  themeName     String @map("theme_name")
+  themeId       String @map("theme_id")
+  devicePresets Json   @map("device_presets")
+  files         Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, previewVersion])
+  @@index([businessId, createdAt])
+  @@index([generatedWebsiteId])
+  @@map("website_previews")
+}
+
+model PreviewReport {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  generatedWebsiteId String           @map("generated_website_id")
+  generatedWebsite   GeneratedWebsite @relation(fields: [generatedWebsiteId], references: [id], onDelete: Cascade)
+
+  previewVersion           Int    @default(1) @map("preview_version")
+  generatedWebsiteVersion  Int    @map("generated_website_version")
+  validationVersion        String @map("validation_version")
+  generatedByModuleVersion String @map("generated_by_module_version")
+
+  // ValidationRuleResult[] — the flattened output of every registered
+  // validator (StructuralValidator/ContentCompletenessValidator/
+  // SEOValidator/AccessibilityValidator/PerformanceValidator), each
+  // carrying ruleId/ruleCategory/ruleName/severity/status/message/
+  // recommendation/documentationUrl (founder's explicit per-rule field
+  // requirement).
+  rules Json
+
+  validationTimestamp DateTime @map("validation_timestamp")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, previewVersion])
+  @@index([businessId, createdAt])
+  @@index([generatedWebsiteId])
+  @@map("preview_reports")
+}
+
+model PublishReadinessReport {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  generatedWebsiteId String           @map("generated_website_id")
+  generatedWebsite   GeneratedWebsite @relation(fields: [generatedWebsiteId], references: [id], onDelete: Cascade)
+
+  previewVersion           Int    @default(1) @map("preview_version")
+  generatedWebsiteVersion  Int    @map("generated_website_version")
+  validationVersion        String @map("validation_version")
+  generatedByModuleVersion String @map("generated_by_module_version")
+
+  // Each a ScoreBreakdown {score, maxScore, deductions[]} — every score
+  // explains itself via `deductions` (founder's explicit "must explain
+  // why points were deducted" requirement), never a bare number.
+  seoScore                 Json @map("seo_score")
+  accessibilityScore       Json @map("accessibility_score")
+  performanceScore         Json @map("performance_score")
+  contentCompletenessScore Json @map("content_completeness_score")
+  structuralIntegrityScore Json @map("structural_integrity_score")
+  overallPublishScore      Json @map("overall_publish_score")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, previewVersion])
+  @@index([businessId, createdAt])
+  @@index([generatedWebsiteId])
+  @@map("publish_readiness_reports")
 }
 
 model Website {

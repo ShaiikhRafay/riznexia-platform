@@ -1,0 +1,27 @@
+{
+  "name": "@riznexia/website-preview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Website Preview: read-only preview + validation + publish-readiness scoring over an already-assembled GeneratedWebsite (M8) — Doc 21 M9.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@riznexia/shared-types": "workspace:*",
+    "typescript": "^5.6.0"
+  },
+  "devDependencies": {
+    "@riznexia/config-eslint": "workspace:*",
+    "@riznexia/config-typescript": "workspace:*",
+    "@riznexia/website-generator": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.11.0",
+    "vitest": "^2.1.0"
+  }
+}
