@@ -2,6 +2,10 @@
 #   docker build -f apps/api/Dockerfile -t riznexia-api .
 
 FROM node:22-alpine AS base
+# Prisma's generated query engine needs OpenSSL present on Alpine at both
+# `prisma generate` time (deps stage) and runtime — without it, the API
+# crashes on first DB query with a missing libssl shared-library error.
+RUN apk add --no-cache openssl
 RUN corepack enable
 WORKDIR /repo
 
