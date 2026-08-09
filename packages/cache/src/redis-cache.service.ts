@@ -34,10 +34,15 @@ export class RedisCacheService {
   /**
    * Atomically increments a counter, setting an expiry only the first time
    * the key is created — used for cost/quota counters with a rolling or
-   * fixed-window reset (e.g. "monthly cost so far").
+   * fixed-window reset (e.g. "monthly cost so far"). Uses INCRBYFLOAT, not
+   * INCRBY — every real caller increments by a fractional USD amount (e.g.
+   * `CostService.charge()`), and Redis's INCRBY rejects any non-integer
+   * value outright (`ERR value is not an integer or out of range`) rather
+   * than truncating it. This was never exercised against a real Redis
+   * instance until first production deploy, where it surfaced immediately.
    */
   async incrementCounter(key: string, by: number, ttlSecondsIfNew: number): Promise<number> {
-    const newValue = await this.client.incrby(key, by);
+    const newValue = await this.client.incrbyfloat(key, by);
     const ttl = await this.client.ttl(key);
     if (ttl === -1) {
       // -1 = key exists with no expiry (i.e. this increment just created it,

@@ -6,7 +6,7 @@ describe('RedisCacheService', () => {
   let client: {
     get: ReturnType<typeof vi.fn>;
     set: ReturnType<typeof vi.fn>;
-    incrby: ReturnType<typeof vi.fn>;
+    incrbyfloat: ReturnType<typeof vi.fn>;
     ttl: ReturnType<typeof vi.fn>;
     expire: ReturnType<typeof vi.fn>;
     del: ReturnType<typeof vi.fn>;
@@ -17,7 +17,7 @@ describe('RedisCacheService', () => {
     client = {
       get: vi.fn(),
       set: vi.fn(),
-      incrby: vi.fn(),
+      incrbyfloat: vi.fn(),
       ttl: vi.fn(),
       expire: vi.fn(),
       del: vi.fn(),
@@ -65,7 +65,7 @@ describe('RedisCacheService', () => {
 
   describe('incrementCounter', () => {
     it('sets an expiry when the key has none (ttl === -1)', async () => {
-      client.incrby.mockResolvedValue(5);
+      client.incrbyfloat.mockResolvedValue(5);
       client.ttl.mockResolvedValue(-1);
       const result = await service.incrementCounter('k', 5, 3600);
       expect(result).toBe(5);
@@ -73,7 +73,7 @@ describe('RedisCacheService', () => {
     });
 
     it('does not re-set an expiry when the key already has one', async () => {
-      client.incrby.mockResolvedValue(10);
+      client.incrbyfloat.mockResolvedValue(10);
       client.ttl.mockResolvedValue(1800);
       await service.incrementCounter('k', 5, 3600);
       expect(client.expire).not.toHaveBeenCalled();
