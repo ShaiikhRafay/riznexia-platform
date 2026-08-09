@@ -11,6 +11,11 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
+# pnpm 9's default build-script gating skips @prisma/client's own postinstall
+# (which runs `prisma generate`) unless explicitly approved, so a fresh
+# Docker install silently ends up with an ungenerated/default client —
+# generate it explicitly rather than relying on the postinstall hook.
+RUN pnpm --filter @riznexia/db run generate
 
 # ---- build: compile apps/api and its workspace dependencies ----
 FROM base AS build
