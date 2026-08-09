@@ -35,5 +35,12 @@ COPY --from=build /repo/node_modules ./node_modules
 # Node's module resolution from apps/api/dist/main.js can't find packages
 # like reflect-metadata that aren't hoisted to the root node_modules.
 COPY --from=build /repo/apps/api/node_modules ./apps/api/node_modules
+# apps/api's own workspace dependencies (@riznexia/db, @riznexia/shared-types,
+# @riznexia/ai, @riznexia/cache, @riznexia/logger, @riznexia/themes,
+# @riznexia/website-generator, @riznexia/website-preview) are pnpm symlinks
+# pointing at these sibling packages, not into the .pnpm store — the symlinks
+# themselves get copied above, but their targets don't exist in this stage
+# without copying the packages themselves (built dist output included).
+COPY --from=build /repo/packages ./packages
 EXPOSE 3001
 CMD ["node", "apps/api/dist/main.js"]
