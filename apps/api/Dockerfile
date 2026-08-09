@@ -30,5 +30,10 @@ WORKDIR /repo
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
 COPY --from=build /repo/apps/api/package.json ./apps/api/package.json
 COPY --from=build /repo/node_modules ./node_modules
+# pnpm gives each workspace package its own node_modules of symlinks into the
+# root .pnpm store (already copied above) for its direct deps — without this,
+# Node's module resolution from apps/api/dist/main.js can't find packages
+# like reflect-metadata that aren't hoisted to the root node_modules.
+COPY --from=build /repo/apps/api/node_modules ./apps/api/node_modules
 EXPOSE 3001
 CMD ["node", "apps/api/dist/main.js"]
