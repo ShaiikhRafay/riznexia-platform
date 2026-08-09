@@ -82,6 +82,103 @@ describe('permission.constants', () => {
     expect(rolesWithPreview.sort()).toEqual(rolesWithAssemble.sort());
   });
 
+  // Module M10 (DECISIONS.md D-090) — four distinct CRM permissions.
+  // crm:view/crm:manage go to every role that already touches leads
+  // operationally (incl. sales_executive); crm:assign/crm:report are
+  // manager-and-up only, restricted like team:manage/cost:view.
+  it('grants crm:view and crm:manage to sales_executive, but not crm:assign or crm:report', () => {
+    expect(roleHasPermission('sales_executive', 'crm:view')).toBe(true);
+    expect(roleHasPermission('sales_executive', 'crm:manage')).toBe(true);
+    expect(roleHasPermission('sales_executive', 'crm:assign')).toBe(false);
+    expect(roleHasPermission('sales_executive', 'crm:report')).toBe(false);
+  });
+
+  it('restricts crm:assign and crm:report to admin/sales_manager/super_admin, same as cost:view', () => {
+    const rolesWithCostView = TEAM_ROLES.filter((role) => roleHasPermission(role, 'cost:view'));
+    const rolesWithCrmAssign = TEAM_ROLES.filter((role) => roleHasPermission(role, 'crm:assign'));
+    const rolesWithCrmReport = TEAM_ROLES.filter((role) => roleHasPermission(role, 'crm:report'));
+    expect(rolesWithCrmAssign.sort()).toEqual(rolesWithCostView.sort());
+    expect(rolesWithCrmReport.sort()).toEqual(rolesWithCostView.sort());
+  });
+
+  it('does not give developer or viewer any crm:* permission', () => {
+    for (const permission of ['crm:view', 'crm:manage', 'crm:assign', 'crm:report'] as const) {
+      expect(roleHasPermission('developer', permission)).toBe(false);
+      expect(roleHasPermission('viewer', permission)).toBe(false);
+    }
+  });
+
+  // Module M11 (DECISIONS.md D-098) — four distinct deployment
+  // permissions. deployment:view/deployment:create go to every role that
+  // already touches the generation pipeline (incl. sales_executive);
+  // deployment:rollback/deployment:manage are manager-and-up only.
+  // Unlike crm:*, deployment:view also reaches developer/viewer — a
+  // deploy failure is exactly the kind of thing a developer needs to see
+  // without being handed deployment:create/rollback/manage.
+  it('grants deployment:view and deployment:create to sales_executive, but not deployment:rollback or deployment:manage', () => {
+    expect(roleHasPermission('sales_executive', 'deployment:view')).toBe(true);
+    expect(roleHasPermission('sales_executive', 'deployment:create')).toBe(true);
+    expect(roleHasPermission('sales_executive', 'deployment:rollback')).toBe(false);
+    expect(roleHasPermission('sales_executive', 'deployment:manage')).toBe(false);
+  });
+
+  it('restricts deployment:rollback and deployment:manage to admin/sales_manager/super_admin, same as cost:view', () => {
+    const rolesWithCostView = TEAM_ROLES.filter((role) => roleHasPermission(role, 'cost:view'));
+    const rolesWithRollback = TEAM_ROLES.filter((role) =>
+      roleHasPermission(role, 'deployment:rollback'),
+    );
+    const rolesWithManage = TEAM_ROLES.filter((role) =>
+      roleHasPermission(role, 'deployment:manage'),
+    );
+    expect(rolesWithRollback.sort()).toEqual(rolesWithCostView.sort());
+    expect(rolesWithManage.sort()).toEqual(rolesWithCostView.sort());
+  });
+
+  it('grants developer and viewer deployment:view (read-only visibility) but nothing else deployment:*', () => {
+    for (const role of ['developer', 'viewer'] as const) {
+      expect(roleHasPermission(role, 'deployment:view')).toBe(true);
+      expect(roleHasPermission(role, 'deployment:create')).toBe(false);
+      expect(roleHasPermission(role, 'deployment:rollback')).toBe(false);
+      expect(roleHasPermission(role, 'deployment:manage')).toBe(false);
+    }
+  });
+
+  // Module M12 (DECISIONS.md D-110) — four distinct analytics
+  // permissions. Unlike crm:*/deployment:*, sales_executive holds none of
+  // them — every M12 domain is inherently org-wide, the same "manager-
+  // tier visibility" class cost:view already restricts.
+  it('grants no analytics:* permission to sales_executive', () => {
+    for (const permission of [
+      'analytics:view',
+      'analytics:report',
+      'analytics:export',
+      'analytics:manage',
+    ] as const) {
+      expect(roleHasPermission('sales_executive', permission)).toBe(false);
+    }
+  });
+
+  it('restricts analytics:report/export/manage to admin/sales_manager/super_admin, same as cost:view', () => {
+    const rolesWithCostView = TEAM_ROLES.filter((role) => roleHasPermission(role, 'cost:view'));
+    for (const permission of [
+      'analytics:report',
+      'analytics:export',
+      'analytics:manage',
+    ] as const) {
+      const rolesWithPermission = TEAM_ROLES.filter((role) => roleHasPermission(role, permission));
+      expect(rolesWithPermission.sort()).toEqual(rolesWithCostView.sort());
+    }
+  });
+
+  it('grants developer and viewer analytics:view (read-only visibility) but nothing else analytics:*', () => {
+    for (const role of ['developer', 'viewer'] as const) {
+      expect(roleHasPermission(role, 'analytics:view')).toBe(true);
+      expect(roleHasPermission(role, 'analytics:report')).toBe(false);
+      expect(roleHasPermission(role, 'analytics:export')).toBe(false);
+      expect(roleHasPermission(role, 'analytics:manage')).toBe(false);
+    }
+  });
+
   it('gives developer system:debug but not lead-mutation permissions', () => {
     expect(roleHasPermission('developer', 'system:debug')).toBe(true);
     expect(roleHasPermission('developer', 'leads:write')).toBe(false);

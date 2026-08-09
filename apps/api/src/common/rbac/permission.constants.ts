@@ -43,6 +43,39 @@ import type { TeamRole } from '@riznexia/shared-types';
 // capability from generating one, and the founder wants it independently
 // assignable/revocable for future client-approval, internal-QA, and
 // review-workflow features). Same role set again.
+// Module M10 (DECISIONS.md D-090) — four dedicated CRM permissions, per
+// the founder's explicit brief, each with a distinct real purpose:
+// `crm:view` gates the new CRM read surface (stages/tasks/proposals —
+// narrower than `leads:read`, since CRM operational detail is more
+// sales-sensitive than the general lead directory); `crm:manage` gates
+// CRM mutations (stage config, transitions, tasks, proposals, manually-
+// logged activities); `crm:assign` is specifically lead-owner
+// reassignment (`LeadCRM.ownerId`), split out from `crm:manage` because
+// reassignment is commonly manager-only even where a rep can otherwise
+// manage their own CRM data; `crm:report` gates the dashboard, same
+// restricted pattern as `cost:view`.
+// Module M11 (DECISIONS.md D-098) — four dedicated deployment permissions,
+// per the founder's explicit brief, none reused from an earlier module:
+// `deployment:view` gates every read (deployment history, status, health,
+// domains); `deployment:create` gates requesting a new deployment and
+// retrying a failed one (both are "start a new deployment attempt");
+// `deployment:rollback` is split out from `deployment:create` — rolling
+// production back is a materially different blast radius than deploying
+// forward; `deployment:manage` gates domain/SSL registration and manually
+// triggering a health check.
+// Module M12 (DECISIONS.md D-110) — four dedicated analytics permissions,
+// per the founder's explicit brief, none reused from an earlier module.
+// Unlike CRM (where a rep has genuinely their-own-leads data to see),
+// every M12 domain is inherently org-wide — Lead Funnel, AI Cost,
+// Deployment health — the same "manager-tier visibility" class `cost:view`
+// already restricts, so `sales_executive` holds none of the four.
+// `analytics:view` gates every report/dashboard read; `analytics:report`
+// gates a forced-refresh report run (heavier compute than the default
+// cached view); `analytics:export` gates downloading a report; `analytics
+// :manage` is created now, enforced on nothing yet, reserved for the
+// Future Compatibility management surface (Scheduled Reports/KPI Alerts
+// config) — the same "defined ahead of its first consumer" precedent as
+// `team:manage`/`cost:view` at their own introduction.
 export const PERMISSIONS = [
   'leads:read',
   'leads:write',
@@ -56,6 +89,18 @@ export const PERMISSIONS = [
   'content:bind',
   'website:assemble',
   'website:preview',
+  'crm:view',
+  'crm:manage',
+  'crm:assign',
+  'crm:report',
+  'deployment:view',
+  'deployment:create',
+  'deployment:rollback',
+  'deployment:manage',
+  'analytics:view',
+  'analytics:report',
+  'analytics:export',
+  'analytics:manage',
   'team:manage',
   'cost:view',
   'system:debug',
@@ -81,6 +126,18 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'content:bind',
     'website:assemble',
     'website:preview',
+    'crm:view',
+    'crm:manage',
+    'crm:assign',
+    'crm:report',
+    'deployment:view',
+    'deployment:create',
+    'deployment:rollback',
+    'deployment:manage',
+    'analytics:view',
+    'analytics:report',
+    'analytics:export',
+    'analytics:manage',
     'team:manage',
     'cost:view',
     'system:debug',
@@ -98,6 +155,18 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'content:bind',
     'website:assemble',
     'website:preview',
+    'crm:view',
+    'crm:manage',
+    'crm:assign',
+    'crm:report',
+    'deployment:view',
+    'deployment:create',
+    'deployment:rollback',
+    'deployment:manage',
+    'analytics:view',
+    'analytics:report',
+    'analytics:export',
+    'analytics:manage',
     'team:manage',
     'cost:view',
   ],
@@ -113,12 +182,16 @@ const ROLE_PERMISSIONS: Record<TeamRole, readonly Permission[]> = {
     'content:bind',
     'website:assemble',
     'website:preview',
+    'crm:view',
+    'crm:manage',
+    'deployment:view',
+    'deployment:create',
   ],
-  developer: ['leads:read', 'discovery:read', 'system:debug'],
+  developer: ['leads:read', 'discovery:read', 'deployment:view', 'analytics:view', 'system:debug'],
   // Strictly read-only, and deliberately excludes `cost:view` — Doc 15's
   // "only Admin/Manager" statement is a real restriction, not just a
   // default; Viewer being a catch-all read-only role doesn't override it.
-  viewer: ['leads:read', 'discovery:read'],
+  viewer: ['leads:read', 'discovery:read', 'deployment:view', 'analytics:view'],
 };
 
 export function getPermissionsForRole(role: TeamRole): readonly Permission[] {

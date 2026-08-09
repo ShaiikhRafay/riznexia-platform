@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ClerkService } from '../../auth/clerk.service';
+import { DevAuthService } from '../../auth/dev-auth.service';
 import { TeamMemberService } from '../../auth/team-member.service';
 import type { AuthenticatedRequest } from '../../auth/types/authenticated-request';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -16,6 +17,7 @@ export class ClerkAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly clerkService: ClerkService,
     private readonly teamMemberService: TeamMemberService,
+    private readonly devAuthService: DevAuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -28,6 +30,16 @@ export class ClerkAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+
+    // Local-development-only Clerk bypass (see DevAuthService) — every
+    // real Clerk verification line below this block is completely
+    // unreached, and therefore unmodified in behavior, whenever this is
+    // false (which is always true outside NODE_ENV=development).
+    if (this.devAuthService.isEnabled()) {
+      request.user = await this.devAuthService.getDevRequestUser();
+      return true;
+    }
+
     const token = extractBearerToken(request.headers.authorization);
     if (!token) {
       throw new UnauthenticatedException();

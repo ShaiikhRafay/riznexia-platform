@@ -104,6 +104,10 @@ export type LeadNote = z.infer<typeof leadNoteSchema>;
 
 // Mirrors the `LeadActivityType` Prisma enum (Doc 18 §8), lowercase per the
 // API contract — same casing split as every other enum in this package.
+// Module M10 (DECISIONS.md D-086): call/email/meeting/whatsapp/
+// website_generated/preview_sent/proposal_sent added — this same enum is
+// reused for the CRM's rep-facing activity timeline (founder's Decision
+// 5), not duplicated into a parallel type.
 export const LEAD_ACTIVITY_TYPES = [
   'created',
   'stage_changed',
@@ -112,6 +116,13 @@ export const LEAD_ACTIVITY_TYPES = [
   'note_added',
   'tags_changed',
   'deleted',
+  'call',
+  'email',
+  'meeting',
+  'whatsapp',
+  'website_generated',
+  'preview_sent',
+  'proposal_sent',
 ] as const;
 export type LeadActivityType = (typeof LEAD_ACTIVITY_TYPES)[number];
 

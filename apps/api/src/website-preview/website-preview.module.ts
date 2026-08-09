@@ -8,9 +8,15 @@ import { WebsitePreviewService } from './website-preview.service';
 // businessName is read back out of the already-generated website, never
 // from the raw Business record) and no ThemeModule/AiModule dependency —
 // every M9 engine is a pure function, not a registered provider.
+//
+// Module M11 — `WebsitePreviewService` is exported so the Deployment
+// Engine can call `getValidationReport()` directly (reading M9's
+// already-computed PreviewReport, never re-running validators itself —
+// DECISIONS.md D-097).
 @Module({
   imports: [LeadsModule],
   controllers: [WebsitePreviewController],
   providers: [WebsitePreviewService],
+  exports: [WebsitePreviewService],
 })
 export class WebsitePreviewModule {}

@@ -70,10 +70,35 @@ enum JobStatus {
   FAILED
 }
 
+// Module M10 (DECISIONS.md D-085) — VIEWED/ACCEPTED/REJECTED added for
+// proposal tracking. EDITED is no longer produced by any M10 code path
+// (immutable version history — D-085 — means "editing" creates a new
+// `SalesProposal` row/version rather than transitioning an existing one)
+// but stays in the enum rather than being removed, since removing a
+// database enum value the schema has ever shipped with is a real,
+// disruptive migration for no functional benefit.
 enum ProposalStatus {
   DRAFT
   EDITED
   SENT_MANUALLY
+  VIEWED
+  ACCEPTED
+  REJECTED
+}
+
+// Module M10 — CrmTask.priority/.status.
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 enum DiscoveryJobStatus {
@@ -83,12 +108,89 @@ enum DiscoveryJobStatus {
   FAILED
 }
 
+// Module M11 (DECISIONS.md D-093) — the Deployment Provider abstraction's
+// closed set of pluggable targets. Only VERCEL has a concrete provider
+// class this phase (`VercelProvider`); the rest are reserved values with
+// no implementation yet, matching every other closed-enum-reservation in
+// this codebase (e.g. `ProposalStatus.EDITED`) — a deliberate future
+// extension point, not a silently-accepted new string.
+enum DeploymentProviderName {
+  VERCEL
+  CLOUDFLARE_PAGES
+  NETLIFY
+  AWS_AMPLIFY
+  AZURE_STATIC_WEB_APPS
+  SELF_HOSTED
+}
+
+// Module M11 (DECISIONS.md D-093) — only `PRODUCTION` is creatable via the
+// API this phase; `PREVIEW` is reserved for the founder's Future
+// Compatibility "Preview Deployments" item.
+enum DeploymentEnvironment {
+  PRODUCTION
+  PREVIEW
+}
+
+// Module M11 (DECISIONS.md D-094) — the deployment pipeline itself.
+// Deliberately excludes a "rolled back" value: a rollback never mutates a
+// historical row's status (same D-094 immutability decision), so nothing here ever needs to express
+// "this deployment was superseded" — that fact lives on the *new* row's
+// `rollbackFromDeploymentId` instead.
+enum DeploymentStatus {
+  REQUESTED
+  VALIDATING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// Module M11 (DECISIONS.md D-095) — orthogonal to DeploymentStatus. A
+// deployment can be COMPLETED with healthStatus still UNKNOWN (no health
+// check has run yet) or UNHEALTHY (one ran and failed) — "Production
+// Ready" is `status = COMPLETED && healthStatus = HEALTHY`, not its own
+// enum value.
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  UNHEALTHY
+}
+
+// Module M11 (DECISIONS.md D-096) — Domain Engine.
+enum DomainType {
+  CUSTOM
+  SUBDOMAIN
+}
+
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum SslStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  EXPIRED
+}
+
 // Module M4 (DECISIONS.md D-030+) — the rep-facing lead timeline's event
 // vocabulary. Deliberately a DB enum, not a free-text string: unlike
 // `AuditLog.action` (which spans every entity type in the system and must
 // stay open-ended), this vocabulary is closed to what can actually happen
 // to a Lead, so Postgres can reject a typo rather than silently storing an
 // event type no UI knows how to render.
+// Module M10 (DECISIONS.md D-086) — CALL/EMAIL/MEETING/WHATSAPP/
+// WEBSITE_GENERATED/PREVIEW_SENT/PROPOSAL_SENT added. Reuses this same
+// enum + model rather than a parallel CRM-specific activity system
+// (founder's explicit Decision 5) — one unified, chronological timeline
+// per lead, covering both system audit events (STAGE_CHANGED, ...) and
+// rep-logged sales interactions (CALL, ...). `actorId` (already nullable)
+// is the existing signal for which kind a given row is: null for
+// system-generated (e.g. WEBSITE_GENERATED fired from the M8 pipeline),
+// non-null for a rep manually logging a call/email/meeting/WhatsApp
+// touch. The existing `detail: Json?` column carries type-specific
+// metadata — no schema change needed there.
 enum LeadActivityType {
   CREATED
   STAGE_CHANGED
@@ -97,6 +199,13 @@ enum LeadActivityType {
   NOTE_ADDED
   TAGS_CHANGED
   DELETED
+  CALL
+  EMAIL
+  MEETING
+  WHATSAPP
+  WEBSITE_GENERATED
+  PREVIEW_SENT
+  PROPOSAL_SENT
 }
 
 // Module M5 (DECISIONS.md D-033+) — the provider abstraction's DB-level
@@ -255,6 +364,23 @@ model TeamMember {
   leadActivities LeadActivity[] @relation("LeadActivities")
   placeSyncJobs  PlaceSyncJob[]
 
+  // Module M10 — CRM bounded context. `ownedLeadCrms` is deliberately a
+  // distinct relation from `assignedLeads` above (D-083): the CRM's own
+  // "deal owner" concept on `LeadCRM.ownerId`, independent of the M4
+  // `Lead.assignedToId` this same TeamMember may also hold.
+  ownedLeadCrms     LeadCRM[]       @relation("CrmLeadOwner")
+  assignedCrmTasks  CrmTask[]       @relation("AssignedCrmTasks")
+  completedCrmTasks CrmTask[]       @relation("CompletedCrmTasks")
+  createdCrmTasks   CrmTask[]       @relation("CreatedCrmTasks")
+  createdProposals  SalesProposal[] @relation("CreatedProposals")
+
+  // Module M11 — "Created By" on WebsiteDeployment (founder's explicit
+  // per-deployment field requirement).
+  createdWebsiteDeployments WebsiteDeployment[] @relation("CreatedWebsiteDeployments")
+
+  // Module M12 — the actor behind a captured AnalyticsEvent, when known.
+  analyticsEvents AnalyticsEvent[]
+
   @@index([deletedAt])
   @@map("team_members")
 }
@@ -347,6 +473,10 @@ model Business {
   websitePreviews         WebsitePreview[]
   previewReports          PreviewReport[]
   publishReadinessReports PublishReadinessReport[]
+  // Module M11 (DECISIONS.md D-092) — FK'd here, not to the legacy
+  // `Website` model.
+  websiteDeployments      WebsiteDeployment[]
+  domains                 Domain[]
 
   @@index([deletedAt])
   @@index([city])
@@ -443,6 +573,16 @@ model Lead {
   leadNotes  LeadNote[]
   activities LeadActivity[]
 
+  // Module M10 (DECISIONS.md D-083) — deliberately NOT new columns on
+  // `Lead` itself. `Lead` stays the discovery/business record exactly as
+  // M2/M4 defined it (including its own `pipelineStage` above, untouched);
+  // every CRM-specific field (stage, deal value, lost reason, owner,
+  // follow-up metadata) lives on the separate `LeadCRM` side-table this
+  // relation points to, keeping the two bounded contexts genuinely
+  // separated rather than nominally separated with shared columns.
+  leadCrm  LeadCRM?
+  crmTasks CrmTask[]
+
   @@index([pipelineStage])
   @@index([assignedToId])
   @@index([deletedAt])
@@ -493,6 +633,162 @@ model LeadActivity {
 
   @@index([leadId, createdAt])
   @@map("lead_activities")
+}
+
+// Module M10 (DECISIONS.md D-084) — the Pipeline Engine's configurable
+// stage list, replacing a hardcoded enum specifically for the CRM's own
+// pipeline (the pre-existing `Lead.pipelineStage`/`PipelineStage` enum
+// from M4 is untouched — see D-083). Seeded with 10 default stages by
+// this model's own migration; addable/renameable/reorderable via the API
+// from there. Archived, never hard-deleted (founder's Decision 10) — a
+// `LeadCRM` row referencing an archived stage keeps working, it's simply
+// no longer offered for new selection.
+model SalesStage {
+  id         String    @id @default(uuid())
+  key        String    @unique
+  name       String
+  order      Int       @unique
+  isWon      Boolean   @default(false) @map("is_won")
+  isLost     Boolean   @default(false) @map("is_lost")
+  color      String?
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  leadCrms    LeadCRM[]
+  crmSettings CrmSettings[]
+
+  @@index([archivedAt])
+  @@map("sales_stages")
+}
+
+// Module M10 (DECISIONS.md D-084) — configurable lost-reason list
+// (founder's Decision 11: "Use a LostReason table instead of a fixed
+// enum"), same shape/archive discipline as `SalesStage` above.
+model LostReason {
+  id         String    @id @default(uuid())
+  key        String    @unique
+  label      String
+  order      Int       @unique
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  leadCrms LeadCRM[]
+
+  @@index([archivedAt])
+  @@map("lost_reasons")
+}
+
+// Module M10 (DECISIONS.md D-083) — the CRM bounded context's own
+// per-lead record, one-to-one with `Lead`. Everything the founder's
+// Decision 3 named ("stage, deal value, lost reason, owner, follow-up
+// metadata") lives here, not on `Lead` itself. Rows are created lazily
+// (get-or-create — `LeadCrmService.getOrCreate()`) the first time any CRM
+// engine touches a given lead, rather than `LeadsService` (M4) knowing
+// anything about the CRM module — keeps the dependency direction one-way
+// (crm/ depends on leads/, never the reverse).
+model LeadCRM {
+  id     String @id @default(uuid())
+  leadId String @unique @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  stageId String     @map("stage_id")
+  stage   SalesStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
+
+  dealValueUsd Decimal? @map("deal_value_usd") @db.Decimal(12, 2)
+
+  lostReasonId String?     @map("lost_reason_id")
+  lostReason   LostReason? @relation(fields: [lostReasonId], references: [id], onDelete: SetNull)
+
+  // The CRM's own "deal owner" — deliberately independent of
+  // `Lead.assignedToId` (D-083). Nullable: a lead isn't necessarily
+  // claimed by a rep in the CRM sense the moment its `LeadCRM` row is
+  // lazily created.
+  ownerId String?     @map("owner_id")
+  owner   TeamMember? @relation("CrmLeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  // Follow-up metadata (founder's Decision 3) — `nextFollowUpAt` is a
+  // plain, directly-settable field; nothing dispatches a reminder for it
+  // (no notification channel exists yet — email/WhatsApp sending are
+  // explicitly out of scope this module). `lastActivityAt` is a cheap
+  // denormalized pointer to this lead's most recent interaction-type
+  // `LeadActivity` row, maintained by the Activity Engine, so Reporting/
+  // stale-lead queries never need an expensive correlated subquery.
+  nextFollowUpAt DateTime? @map("next_follow_up_at")
+  lastActivityAt DateTime? @map("last_activity_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([stageId])
+  @@index([ownerId])
+  @@index([nextFollowUpAt])
+  @@map("lead_crms")
+}
+
+// Module M10 — Task Engine. "Follow-ups" and "Reminders" (founder's Core
+// Features list) are deliberately not separate entities — a follow-up is
+// just a `CrmTask` (e.g. title: "Follow up with X"), and `reminderAt` is
+// a stored scheduling field, not a delivery mechanism (nothing sends a
+// notification for it this module — see the constraint against email/
+// WhatsApp sending). `estimatedDurationMinutes`/`actualDurationMinutes`/
+// `completedById` per the founder's explicit Decision 4.
+model CrmTask {
+  id     String @id @default(uuid())
+  leadId String @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  dueDate     DateTime     @map("due_date")
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(PENDING)
+
+  assignedToId String?     @map("assigned_to")
+  assignedTo   TeamMember? @relation("AssignedCrmTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  reminderAt DateTime? @map("reminder_at")
+
+  estimatedDurationMinutes Int? @map("estimated_duration_minutes")
+  actualDurationMinutes    Int? @map("actual_duration_minutes")
+
+  completedById String?     @map("completed_by")
+  completedBy   TeamMember? @relation("CompletedCrmTasks", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt   DateTime?   @map("completed_at")
+
+  createdById String?     @map("created_by")
+  createdBy   TeamMember? @relation("CreatedCrmTasks", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([leadId])
+  @@index([assignedToId, status])
+  @@index([dueDate])
+  @@map("crm_tasks")
+}
+
+// Module M10 (DECISIONS.md D-087) — founder's explicit Decision 12.
+// Single-organization system (same "no multi-org support" scope as
+// `TeamMember`'s own doc comment) — a genuine singleton, seeded with
+// exactly one row by this model's own migration and only ever read/
+// updated by id from there, never created a second time.
+model CrmSettings {
+  id String @id @default(uuid())
+
+  defaultStageId String?     @map("default_stage_id")
+  defaultStage   SalesStage? @relation(fields: [defaultStageId], references: [id], onDelete: SetNull)
+
+  currency                        String @default("USD")
+  timezone                        String @default("UTC")
+  businessHours                   Json?  @map("business_hours")
+  defaultReminderMinutesBeforeDue Int?   @map("default_reminder_minutes_before_due")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("crm_settings")
 }
 
 // Module M6 (DECISIONS.md D-037+) — AI Business Analyzer output. Every
@@ -907,6 +1203,7 @@ model GeneratedWebsite {
   websitePreviews         WebsitePreview[]
   previewReports          PreviewReport[]
   publishReadinessReports PublishReadinessReport[]
+  WebsiteDeployment       WebsiteDeployment[]
 
   @@unique([businessId, configVersion])
   @@index([businessId, createdAt])
@@ -1016,6 +1313,134 @@ model PublishReadinessReport {
   @@map("publish_readiness_reports")
 }
 
+// Module M11 (DECISIONS.md D-092+) — Deployment Engine. Each row is one
+// immutable deployment event, FK'd to `GeneratedWebsite` (M8) directly —
+// not the legacy, unused `Website`/`Deployment` scaffold from M2 (D-092).
+// Once a row reaches a terminal `status` (COMPLETED/FAILED) it is never
+// updated again except for `healthStatus` (D-095, denormalized from the
+// latest `DeploymentHealthCheck`) — rollback and retry each create a
+// brand-new row (`rollbackFromDeploymentId`/`retryOfDeploymentId`) rather
+// than mutating history (founder's explicit Decision 3).
+model WebsiteDeployment {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  generatedWebsiteId      String           @map("generated_website_id")
+  generatedWebsite        GeneratedWebsite @relation(fields: [generatedWebsiteId], references: [id], onDelete: Cascade)
+  generatedWebsiteVersion Int              @map("generated_website_version")
+
+  // Immutable per-business sequence, server-computed (max + 1), same
+  // pattern as `SalesProposal.version` (D-085) — never client-supplied,
+  // never reused.
+  deploymentVersion Int @map("deployment_version")
+
+  provider             DeploymentProviderName
+  providerVersion      String                 @map("provider_version")
+  // The provider's own opaque deployment id, for status polling —
+  // null until the provider actually accepts the deploy call.
+  providerDeploymentId String?                @map("provider_deployment_id")
+
+  environment DeploymentEnvironment @default(PRODUCTION)
+  commitHash  String?               @map("commit_hash")
+
+  status       DeploymentStatus @default(REQUESTED)
+  healthStatus HealthStatus     @default(UNKNOWN) @map("health_status")
+
+  liveUrl      String? @map("live_url")
+  errorMessage String? @map("error_message")
+
+  // Content hash of the deployed file set (dedup/integrity signal) and
+  // this module's own version — founder's explicit "Additional
+  // Requirements" field list.
+  deploymentHash          String @map("deployment_hash")
+  deploymentEngineVersion String @map("deployment_engine_version")
+
+  // Never a status flag mutated onto a prior row — a rollback/retry is
+  // always a fresh row pointing back at what it rolls back/retries
+  // (founder's explicit Decision 3: "Rollback is a new deployment event").
+  rollbackFromDeploymentId String? @map("rollback_from_deployment_id")
+  retryOfDeploymentId      String? @map("retry_of_deployment_id")
+
+  buildStartedAt    DateTime? @map("build_started_at")
+  buildCompletedAt  DateTime? @map("build_completed_at")
+  completedAt       DateTime? @map("completed_at")
+  executionDuration Int?      @map("execution_duration_ms")
+
+  createdById String?     @map("created_by")
+  createdBy   TeamMember? @relation("CreatedWebsiteDeployments", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  healthChecks       DeploymentHealthCheck[]
+  domainsCurrentlyOn Domain[]                @relation("CurrentDeployment")
+
+  @@unique([businessId, deploymentVersion])
+  @@index([businessId, createdAt])
+  @@index([generatedWebsiteId])
+  @@map("website_deployments")
+}
+
+// Module M11 (DECISIONS.md D-095) — Health Check Engine. One row per
+// check *run* (not folded into WebsiteDeployment itself) since a
+// deployment can be checked repeatedly over its lifetime — automatically
+// once right after it completes, and again on demand.
+model DeploymentHealthCheck {
+  id String @id @default(uuid())
+
+  deploymentId String            @map("deployment_id")
+  deployment   WebsiteDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  status         HealthStatus
+  checkedAt      DateTime     @map("checked_at")
+  responseTimeMs Int?         @map("response_time_ms")
+  httpStatusCode Int?         @map("http_status_code")
+  // Which specific checks ran and their individual pass/fail — same
+  // self-explaining-not-a-bare-verdict discipline as
+  // PublishReadinessReport's ScoreBreakdown.deductions (D-080).
+  detail         Json?
+
+  @@index([deploymentId, checkedAt])
+  @@map("deployment_health_checks")
+}
+
+// Module M11 (DECISIONS.md D-096) — Domain Engine. Unlike
+// WebsiteDeployment, this is a mutable, long-lived pointer (a hostname
+// persists across many deployments going live under it) — closer in kind
+// to LeadCRM (D-083) than to SalesProposal's immutable-version rows
+// (D-085). Metadata and provider-integration status only — no DNS
+// automation, no SSL issuance, no registrar API calls (founder's explicit
+// Decision 6).
+model Domain {
+  id String @id @default(uuid())
+
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  hostname String                 @unique
+  type     DomainType
+  provider DeploymentProviderName
+
+  verificationStatus DomainVerificationStatus @default(PENDING) @map("verification_status")
+  // The DNS record value a human needs to add at their registrar —
+  // provider-returned metadata only, never written anywhere by this
+  // module (founder's explicit "do not implement DNS automation").
+  verificationRecord Json?                    @map("verification_record")
+
+  sslStatus SslStatus @default(PENDING) @map("ssl_status")
+
+  currentDeploymentId String?            @map("current_deployment_id")
+  currentDeployment   WebsiteDeployment? @relation("CurrentDeployment", fields: [currentDeploymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@index([currentDeploymentId])
+  @@map("domains")
+}
+
 model Website {
   id          String           @id @default(uuid())
   leadId      String           @map("lead_id")
@@ -1092,16 +1517,42 @@ model Deployment {
   @@map("deployments")
 }
 
+// Module M10 (DECISIONS.md D-085) — Proposal Engine. Extended, not
+// replaced, from its original (previously unused by application code)
+// M2-era shape. Founder's explicit Decision 7: "Sales Proposals must
+// support immutable version history. Never overwrite proposal versions."
+// — so each row IS one version: `content`/`version`/`leadId` are set
+// once at creation and never updated afterward; only the lifecycle/
+// tracking fields (`status`, `sentAt`/`viewedAt`/`acceptedAt`/
+// `rejectedAt`) are ever mutated in place, and only on that same row —
+// "editing" a proposal means creating a new row with `version + 1`,
+// never touching a prior version's content. `content` is nullable
+// (renamed from the original required `draftContent`): this module
+// tracks proposals, it doesn't draft them (no AI content generation is
+// built here — see D-082), so a rep may log "sent v2" purely for
+// tracking with the real document living elsewhere.
 model SalesProposal {
-  id           String         @id @default(uuid())
-  leadId       String         @map("lead_id")
-  lead         Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  draftContent String         @map("draft_content")
-  status       ProposalStatus @default(DRAFT)
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  id     String @id @default(uuid())
+  leadId String @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  @@index([leadId])
+  version Int
+  content String?
+  status  ProposalStatus @default(DRAFT)
+
+  sentAt     DateTime? @map("sent_at")
+  viewedAt   DateTime? @map("viewed_at")
+  acceptedAt DateTime? @map("accepted_at")
+  rejectedAt DateTime? @map("rejected_at")
+
+  createdById String?     @map("created_by")
+  createdBy   TeamMember? @relation("CreatedProposals", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([leadId, version])
+  @@index([leadId, createdAt])
   @@map("sales_proposals")
 }
 
@@ -1131,6 +1582,50 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId, createdAt])
   @@map("audit_logs")
+}
+
+// Module M12 (DECISIONS.md D-105) — the Analytics Provider abstraction's
+// closed set of pluggable event-tracking targets. Only SELF_HOSTED has a
+// concrete provider class this phase (`SelfHostedAnalyticsProvider`,
+// founder's explicit Decision 3); the rest are reserved values with no
+// adapter behind them yet, the same closed-enum-reservation discipline as
+// `DeploymentProviderName` (D-093).
+enum AnalyticsProviderName {
+  SELF_HOSTED
+  POSTHOG
+  GOOGLE_ANALYTICS
+  MIXPANEL
+  AZURE_APPLICATION_INSIGHTS
+  DATADOG
+}
+
+// Module M12 (DECISIONS.md D-106) — the only table this module owns
+// (founder's explicit Decision 4). Raw platform telemetry captured by
+// `SelfHostedAnalyticsProvider.track()` — genuinely new data (no other
+// module records "Dashboard Viewed"/"Report Generated"-style events),
+// never a copy of a fact some other module already persists. Every
+// Report/Dashboard/Aggregation computation elsewhere in this module reads
+// M1-M11's own tables directly; this table is not an input to any of them.
+model AnalyticsEvent {
+  id String @id @default(uuid())
+
+  eventType  String  @map("event_type")
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+
+  actorId String?     @map("actor_id")
+  actor   TeamMember? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  provider AnalyticsProviderName @default(SELF_HOSTED)
+  metadata Json?
+
+  occurredAt DateTime @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([eventType, occurredAt])
+  @@index([entityType, entityId])
+  @@index([actorId, occurredAt])
+  @@map("analytics_events")
 }
 
 // ============================================================

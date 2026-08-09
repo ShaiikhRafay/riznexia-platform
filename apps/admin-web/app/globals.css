@@ -1,0 +1,114 @@
+@import 'tailwindcss';
+
+/* Tailwind v4 auto-scans this app's own tree; workspace packages need an
+   explicit @source so classes used inside packages/ui aren't purged. */
+@source '../../../packages/ui/src';
+
+/* Design tokens — docs/08 §4 / docs/17 §2-3 (Riznexia internal dashboard
+   design system), rebranded to match riznexia.com's real navy+gold
+   identity (colors pulled directly from the marketing site's own
+   compiled CSS, not eyeballed — see DECISIONS.md). Registered under
+   Tailwind's `--text-*` namespace so the type scale generates real
+   utilities (`text-h1`, `text-body`, ...); color tokens are plain CSS
+   custom properties consumed via arbitrary-value syntax
+   (`bg-(--color-accent)`) across packages/ui and this app, so a theme
+   swap never means hunting down hardcoded hex values. */
+@theme {
+  /* next/font (app/layout.tsx) self-hosts Inter/Sora/JetBrains Mono and
+     exposes them as these CSS variables on <html> — referenced here, not
+     re-declared, so there is exactly one place each font is loaded from.
+     Sora (the marketing site's own display face) is applied to the
+     text-display/h1/h2 utilities below, not swapped in as the base
+     --font-sans, so body copy stays on Inter everywhere it already was. */
+  --font-sans: var(--font-sans-loaded), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-display-loaded), var(--font-sans);
+  --font-mono: var(--font-mono-loaded), ui-monospace, 'SFMono-Regular', monospace;
+
+  --text-display: 30px;
+  --text-display--line-height: 1.2;
+  --text-h1: 24px;
+  --text-h1--line-height: 1.3;
+  --text-h2: 18px;
+  --text-h2--line-height: 1.4;
+  --text-body: 14px;
+  --text-body--line-height: 1.5;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.4;
+  --text-code: 13px;
+  --text-code--line-height: 1.5;
+}
+
+/* Sora on every heading-scale utility, cascading everywhere those classes
+   are already used (every page's `text-display`/`text-h1`/`text-h2`) with
+   zero changes to the ~40 files that use them — same rebrand-without-a-
+   rewrite approach the color tokens below take. */
+.text-display,
+.text-h1,
+.text-h2 {
+  font-family: var(--font-display);
+}
+
+:root {
+  --color-bg-canvas: #ffffff;
+  --color-bg-surface: #f6f5f1;
+  --color-bg-surface-raised: #ffffff;
+  --color-border-default: #1b294224;
+  --color-text-primary: #16223a;
+  --color-text-secondary: #3d4a63;
+  --color-accent: #c99a3e;
+  --color-accent-hover: #a67c2e;
+  /* Text/icon color to put ON TOP of --color-accent — gold is a light,
+     mid-luminance color, so white text there (the old indigo accent's
+     assumption) fails contrast. riznexia.com's own buttons pair this
+     exact gold with dark navy text, not white — matched here. */
+  --color-accent-foreground: #16223a;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+}
+
+/* next-themes toggles the `dark` class on <html> (attribute="class"). Both
+   modes are first-class — every token below is independently tuned, never
+   a mechanical inversion (docs/17 §16). Dark mode's navy comes from the
+   same brand palette (--navy-950), not an unrelated near-black. */
+.dark {
+  --color-bg-canvas: #0f1826;
+  --color-bg-surface: #141d2e;
+  --color-bg-surface-raised: #1a2438;
+  --color-border-default: #2a3550;
+  --color-text-primary: #f5f3ed;
+  --color-text-secondary: #9aa5bd;
+  /* A brighter gold than the light-mode accent — the marketing site's
+     exact gold is tuned for use on white; against dark navy it needs
+     more luminance to read clearly, the same "brighter accent in dark
+     mode" adjustment the previous indigo tokens already made. */
+  --color-accent: #d9b565;
+  --color-accent-hover: #c99a3e;
+  --color-accent-foreground: #16223a;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #38bdf8;
+}
+
+body {
+  background-color: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+/* docs/17 §17/§18 — motion respects prefers-reduced-motion globally, so no
+   component needs its own opt-out; Skeleton additionally carries a
+   `motion-reduce:` variant as a belt-and-suspenders measure since its pulse
+   is the animation reduced-motion users are most likely to notice. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

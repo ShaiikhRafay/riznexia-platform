@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
+import { DashboardModule } from './analytics/dashboard/dashboard.module';
+import { ExportModule } from './analytics/export/export.module';
+import { ReportingModule as AnalyticsReportingModule } from './analytics/reporting/reporting.module';
 import { AuditModule } from './common/audit/audit.module';
 import { CacheModule } from './common/cache/cache.module';
 import { CostModule } from './common/cost/cost.module';
@@ -10,6 +13,14 @@ import { RbacModule } from './common/rbac/rbac.module';
 import { BusinessAnalysisModule } from './business-analysis/business-analysis.module';
 import { ComponentEngineModule } from './component-engine/component-engine.module';
 import { ContentEngineModule } from './content-engine/content-engine.module';
+import { ActivityModule } from './crm/activities/activity.module';
+import { PipelineModule } from './crm/pipeline/pipeline.module';
+import { ProposalModule } from './crm/proposals/proposal.module';
+import { ReportingModule as CrmReportingModule } from './crm/reporting/reporting.module';
+import { TaskModule } from './crm/tasks/task.module';
+import { DomainModule } from './deployment/domain/domain.module';
+import { EngineModule } from './deployment/engine/engine.module';
+import { RollbackModule } from './deployment/rollback/rollback.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { HealthModule } from './health/health.module';
 import { LayoutEngineModule } from './layout-engine/layout-engine.module';
@@ -51,6 +62,17 @@ import { WebsitePreviewModule } from './website-preview/website-preview.module';
     ContentEngineModule,
     WebsiteAssemblyModule,
     WebsitePreviewModule,
+    PipelineModule,
+    TaskModule,
+    ActivityModule,
+    ProposalModule,
+    CrmReportingModule,
+    EngineModule,
+    RollbackModule,
+    DomainModule,
+    DashboardModule,
+    AnalyticsReportingModule,
+    ExportModule,
   ],
 })
 export class AppModule {}

@@ -207,3 +207,117 @@ export class GeneratedWebsiteNotFoundException extends AppException {
     super('GENERATED_WEBSITE_NOT_FOUND', message, HttpStatus.NOT_FOUND);
   }
 }
+
+// ---------- Module M10 — Sales CRM (Doc 19 §4) ----------
+
+export class SalesStageNotFoundException extends AppException {
+  constructor(message = 'No sales stage exists with that id') {
+    super('SALES_STAGE_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class LostReasonNotFoundException extends AppException {
+  constructor(message = 'No lost reason exists with that id') {
+    super('LOST_REASON_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class CrmTaskNotFoundException extends AppException {
+  constructor(message = 'No task exists with that id for this lead') {
+    super('CRM_TASK_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class SalesProposalNotFoundException extends AppException {
+  constructor(message = 'No proposal exists with that id for this lead') {
+    super('SALES_PROPOSAL_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// The Pipeline Engine's one real business-rule gate (Doc 20 fork
+// resolution, founder's architecture review): moving a lead into a
+// `isLost` stage requires recording why, so Reporting's "Lost Reasons"
+// breakdown is never built over silently-missing data.
+export class LostReasonRequiredException extends AppException {
+  constructor(message = 'A lostReasonId is required when moving a lead into a lost stage') {
+    super('LOST_REASON_REQUIRED', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+// ---------- Module M11 — Deployment (Doc 19 §4) ----------
+
+export class WebsiteDeploymentNotFoundException extends AppException {
+  constructor(message = 'No deployment exists with that id for this lead') {
+    super('WEBSITE_DEPLOYMENT_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class DomainNotFoundException extends AppException {
+  constructor(message = 'No domain exists with that id for this lead') {
+    super('DOMAIN_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+// The Build Validation stage's gate (founder's explicit Decision 4):
+// thrown with `details.failedRules` naming which PreviewReport rule(s)
+// blocked the deploy, so a caller sees exactly what to fix rather than a
+// bare rejection.
+export class DeploymentValidationFailedException extends AppException {
+  constructor(
+    message = 'This website is not ready to deploy — it has not passed publish-readiness validation',
+    details?: Record<string, unknown>,
+  ) {
+    super('DEPLOYMENT_VALIDATION_FAILED', message, HttpStatus.UNPROCESSABLE_ENTITY, details);
+  }
+}
+
+// Distinct from DeploymentValidationFailedException: this is an
+// operational/configuration gap (no credentials for the requested
+// provider), not a content-readiness problem with the website itself.
+export class DeploymentProviderUnavailableException extends AppException {
+  constructor(message = 'The requested deployment provider is not configured') {
+    super('DEPLOYMENT_PROVIDER_UNAVAILABLE', message, HttpStatus.SERVICE_UNAVAILABLE);
+  }
+}
+
+// Rollback must always target a previous successful deployment (founder's
+// explicit Decision 3) — thrown when the chosen target isn't
+// COMPLETED + HEALTHY, or belongs to a different business than the lead
+// in the URL.
+export class InvalidRollbackTargetException extends AppException {
+  constructor(message = 'Rollback must target a previous completed, healthy deployment') {
+    super('INVALID_ROLLBACK_TARGET', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+export class DeploymentNotRetryableException extends AppException {
+  constructor(message = 'Only a failed deployment can be retried') {
+    super('DEPLOYMENT_NOT_RETRYABLE', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+// ---------- Module M12 — Analytics & Reporting (Doc 19 §4) ----------
+
+// Founder's explicit Decision 7: CSV is implemented, PDF/Excel are
+// "architecture only" — a request for either rejects with this, not a
+// silent fallback to CSV.
+export class ExportFormatNotImplementedException extends AppException {
+  constructor(format: string) {
+    super(
+      'EXPORT_FORMAT_NOT_IMPLEMENTED',
+      `Export format "${format}" is reserved for a future module — only CSV is implemented this phase`,
+      HttpStatus.NOT_IMPLEMENTED,
+    );
+  }
+}
+
+// `period: 'custom'` requires both endpoints, and a well-formed range —
+// thrown by the Aggregation Engine before any query runs, never a
+// silent empty-range result.
+export class InvalidAggregationRangeException extends AppException {
+  constructor(
+    message = 'A custom aggregation period requires a valid fromDate and toDate, with fromDate before toDate',
+  ) {
+    super('INVALID_AGGREGATION_RANGE', message, HttpStatus.BAD_REQUEST);
+  }
+}

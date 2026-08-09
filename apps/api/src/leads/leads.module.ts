@@ -13,6 +13,11 @@ import { LeadsService } from './leads.service';
   imports: [BusinessModule, AuthModule],
   controllers: [LeadsController],
   providers: [LeadsService, LeadActivityService, LeadNotesService],
-  exports: [LeadsService], // consumed by DiscoveryModule's write path (Doc 22 §14)
+  // LeadsService: consumed by DiscoveryModule's write path (Doc 22 §14).
+  // LeadActivityService: consumed by Module M10's crm/activities/ (the
+  // Activity Engine reuses this same service/model rather than a
+  // parallel one — DECISIONS.md D-086/founder's Decision 5) and
+  // crm/pipeline/ (stage-transition/owner-assignment logging).
+  exports: [LeadsService, LeadActivityService],
 })
 export class LeadsModule {}
