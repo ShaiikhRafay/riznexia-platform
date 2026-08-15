@@ -8,10 +8,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        solid: 'bg-primary text-background hover:opacity-90',
+        solid: 'bg-primary text-background hover:bg-primary-hover',
         outline: 'border border-primary text-primary hover:bg-primary hover:text-background',
-        floating: 'bg-accent text-background shadow-token hover:opacity-90',
-        banner: 'w-full rounded-none bg-primary text-background hover:opacity-90',
+        floating:
+          'bg-accent text-background shadow-token hover:bg-accent-hover hover:shadow-token-hover',
+        banner: 'w-full rounded-none bg-primary text-background hover:bg-primary-hover',
       },
     },
     defaultVariants: {

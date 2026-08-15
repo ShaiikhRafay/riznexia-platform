@@ -40,9 +40,17 @@ export function Hero({
     ? resolvePlacePhotoUrl(backgroundImage.value.photoReference)
     : null;
   const isBackgroundMedia = mediaPosition === 'background' && imageUrl;
+  // No real photo to show (either this business has none, or the
+  // deployment's photo key isn't configured) — a flat solid background
+  // reads as broken/empty; a brand-color gradient reads as designed.
+  const showGradientFallback = mediaPosition === 'background' && !imageUrl;
 
   return (
-    <div className={isBackgroundMedia ? 'relative isolate overflow-hidden' : 'relative'}>
+    <div
+      className={
+        isBackgroundMedia || showGradientFallback ? 'relative isolate overflow-hidden' : 'relative'
+      }
+    >
       {isBackgroundMedia && (
         <Image
           src={imageUrl}
@@ -53,13 +61,16 @@ export function Hero({
           className="absolute inset-0 -z-10 object-cover brightness-75"
         />
       )}
+      {showGradientFallback && (
+        <div className="bg-primary-accent-gradient absolute inset-0 -z-10" />
+      )}
 
       <motion.div
         initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
         animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className={`gap-token-md py-token-xl flex flex-col ${contentAlignment === 'center' ? 'items-center text-center' : 'items-start text-left'} ${
-          isBackgroundMedia ? 'text-white' : ''
+          isBackgroundMedia || showGradientFallback ? 'text-white' : ''
         }`}
       >
         <h1 className="font-heading max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">

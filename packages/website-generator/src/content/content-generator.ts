@@ -68,7 +68,13 @@ export function generateContentManifest(
       component.componentType,
       component.requiredContent,
       component.optionalContent,
-      { brandBrief, business, sectionId, contactSectionComponentId },
+      {
+        brandBrief,
+        business,
+        sectionId,
+        contactSectionComponentId,
+        componentId: component.componentId,
+      },
       navigationItems,
     );
 

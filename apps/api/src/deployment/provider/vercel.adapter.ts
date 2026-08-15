@@ -69,10 +69,26 @@ export class VercelAdapter {
     files: DeploymentFile[];
     target: 'production' | 'staging';
   }): Promise<VercelDeploymentResponse> {
+    // The generated site's own `lib/image-utils.ts` resolves a Business.photos
+    // reference into a real Google Photo Media URL client-side, but only
+    // when NEXT_PUBLIC_GOOGLE_PLACES_API_KEY is present at build time —
+    // without it every photo (Hero background, Info Panel, Gallery) silently
+    // renders without an image rather than a broken one, by that file's own
+    // design. Nothing set this before now, so no deployed site has ever
+    // actually shown a real photo. Reuses the same restricted (Places-API-
+    // only) key apps/api itself uses for discovery — this is provider code,
+    // not business logic, so reading it here (rather than threading it
+    // through the provider-agnostic DeploymentProviderInput) is a deliberate
+    // pragmatic call for the only real provider implementation; revisit if
+    // a second provider is ever actually activated.
+    const googlePlacesApiKey = this.config.get<string>('GOOGLE_PLACES_API_KEY');
     const body = {
       name: params.name,
       target: params.target,
       files: params.files.map((file) => ({ file: file.path, data: file.content })),
+      ...(googlePlacesApiKey
+        ? { env: { NEXT_PUBLIC_GOOGLE_PLACES_API_KEY: googlePlacesApiKey } }
+        : {}),
     };
     // Vercel now rejects a first-ever deployment for a not-yet-existing
     // project unless the request either includes a full `projectSettings`

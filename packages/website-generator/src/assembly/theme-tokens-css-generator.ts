@@ -10,6 +10,16 @@ const SHADOW_VALUES: Record<ThemeTokens['shadow'], string> = {
   pronounced: '0 12px 32px rgba(0, 0, 0, 0.18)',
 };
 
+// A real hover elevation change (not just a static shadow) — one rung up
+// the same fixed scale above, deterministic per theme's own shadow rung.
+// 'pronounced' is already the top rung, so it stays put on hover.
+const SHADOW_HOVER_RUNG: Record<ThemeTokens['shadow'], ThemeTokens['shadow']> = {
+  none: 'subtle',
+  subtle: 'moderate',
+  moderate: 'pronounced',
+  pronounced: 'pronounced',
+};
+
 /**
  * Serializes ThemeTokens (Module M8.2) + AccessibilityProfile
  * (ThemeConfiguration) into `app/theme-tokens.css`'s `:root { ... }`
@@ -32,6 +42,12 @@ export function generateThemeTokensCss(
     `  --color-background: ${themeTokens.background};`,
     `  --color-text: ${themeTokens.text};`,
     `  --color-border: ${themeTokens.secondary};`,
+    // Real hover feedback (color-mix darkens toward black in-browser —
+    // no HSL/hex parsing needed here, works for any input color format
+    // ThemeConfiguration.colorPalette may supply). Widely supported in
+    // every browser this Next.js/React 19 baseline already targets.
+    `  --color-primary-hover: color-mix(in srgb, ${themeTokens.primary} 85%, black);`,
+    `  --color-accent-hover: color-mix(in srgb, ${themeTokens.accent} 85%, black);`,
     `  --font-heading: ${themeTokens.heading};`,
     `  --font-body: ${themeTokens.body};`,
     `  --radius-small: ${themeTokens.radius.small};`,
@@ -44,6 +60,7 @@ export function generateThemeTokensCss(
     `  --spacing-lg: ${themeTokens.spacing.lg};`,
     `  --spacing-xl: ${themeTokens.spacing.xl};`,
     `  --shadow-value: ${SHADOW_VALUES[themeTokens.shadow]};`,
+    `  --shadow-hover-value: ${SHADOW_VALUES[SHADOW_HOVER_RUNG[themeTokens.shadow]]};`,
     `  --min-touch-target: ${accessibilityProfile.minTouchTargetPx}px;`,
     '}',
     '',

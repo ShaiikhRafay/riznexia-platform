@@ -32,7 +32,7 @@ export const SUPPORTED_COMPONENT_TYPES = [
 ] as const;
 export type SupportedComponentType = (typeof SUPPORTED_COMPONENT_TYPES)[number];
 
-export const CONTENT_SLOT_KINDS = ['text', 'image', 'icon', 'link', 'list'] as const;
+export const CONTENT_SLOT_KINDS = ['text', 'image', 'image-list', 'icon', 'link', 'list'] as const;
 export type ContentSlotKind = (typeof CONTENT_SLOT_KINDS)[number];
 
 export const ACCESSIBILITY_ROLES = [

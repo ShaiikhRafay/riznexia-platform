@@ -50,7 +50,15 @@ export const COMPONENT_TYPE_DEFINITIONS: Record<SupportedComponentType, Componen
   },
   'card-grid': {
     requiredContent: [{ slotName: 'items', kind: 'list' }],
-    optionalContent: [{ slotName: 'sectionTitle', kind: 'text' }],
+    // 'images' is additive and optional — only ever resolved for a
+    // Gallery-classified card-grid with real Business.photos (see
+    // content-binding-rules.ts's 'card-grid.images' case); every other
+    // card-grid (Services, etc.) leaves it unresolved and renders
+    // text-only, unaffected.
+    optionalContent: [
+      { slotName: 'sectionTitle', kind: 'text' },
+      { slotName: 'images', kind: 'image-list' },
+    ],
     accessibilityRole: 'region',
     altTextRequired: true,
   },

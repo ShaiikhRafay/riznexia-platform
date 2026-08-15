@@ -16,7 +16,11 @@ describe('VercelAdapter', () => {
   let fetchMock: jest.Mock;
 
   beforeEach(() => {
-    config = { get: jest.fn().mockReturnValue('test-vercel-token') };
+    config = {
+      get: jest.fn((key: string) =>
+        key === 'GOOGLE_PLACES_API_KEY' ? 'test-places-key' : 'test-vercel-token',
+      ),
+    };
     adapter = new VercelAdapter(config as unknown as ConfigService);
     fetchMock = jest.fn();
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -64,12 +68,29 @@ describe('VercelAdapter', () => {
         name: string;
         target: string;
         files: { file: string; data: string }[];
+        env?: Record<string, string>;
       };
       expect(body).toEqual({
         name: 'my-app',
         target: 'production',
         files: [{ file: 'package.json', data: '{}' }],
+        env: { NEXT_PUBLIC_GOOGLE_PLACES_API_KEY: 'test-places-key' },
       });
+    });
+
+    it('omits env entirely when GOOGLE_PLACES_API_KEY is not configured', async () => {
+      config.get.mockImplementation((key: string) =>
+        key === 'VERCEL_API_TOKEN' ? 'test-vercel-token' : undefined,
+      );
+      fetchMock.mockResolvedValue(
+        jsonResponse(200, { id: 'dpl_1', url: 'x.vercel.app', name: 'x', readyState: 'QUEUED' }),
+      );
+
+      await adapter.createDeployment({ name: 'x', files: [], target: 'production' });
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as Record<string, unknown>;
+      expect(body).not.toHaveProperty('env');
     });
 
     it('includes a teamId query param when VERCEL_TEAM_ID is configured', async () => {

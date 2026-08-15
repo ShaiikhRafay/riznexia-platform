@@ -35,4 +35,9 @@ export interface SourcedImageRef {
   source: string;
 }
 
+export interface SourcedImageRefList {
+  value: { photoReference: string }[];
+  source: string;
+}
+
 export type CtaStyle = 'solid-button' | 'outline-button' | 'floating-action' | 'banner-strip';

@@ -14,6 +14,8 @@ export interface ContentBindingContext {
   sectionId: string;
   /** The real componentId of the 'contact' section wrapper, when one exists in this manifest — the deterministic CTA target. */
   contactSectionComponentId: string | null;
+  /** The component's own componentId — the original theme-authored id (e.g. 'gallery-grid'), which survives componentType generalization (component-generator.ts) unchanged. Used only to distinguish otherwise-identically-typed components (a Gallery card-grid from a Services card-grid), never for business-authored content. */
+  componentId: string;
 }
 
 export interface UnresolvedSlot {
@@ -42,6 +44,18 @@ function sourcedLink(
 function sourcedImageRef(photoReference: string, source: string): ContentValue {
   return { value: { photoReference }, source };
 }
+function sourcedImageRefList(
+  photoReferences: { photoReference: string }[],
+  source: string,
+): ContentValue {
+  return { value: photoReferences, source };
+}
+
+// The one theme-authored componentId (packages/themes's own componentSet
+// vocabulary, mirrored in component-type-registry.ts) that means "this
+// card-grid is a photo gallery" — every other card-grid instance (Services,
+// etc.) is content, not photos, and must keep resolving 'items' as text.
+const GALLERY_COMPONENT_ID = 'gallery-grid';
 
 // A structural label derived purely from a technical identifier (kebab-case
 // sectionId -> Title Case) — never business-authored copy. Same technique
@@ -119,6 +133,16 @@ function resolveSlotValue(
         servicesList(brandBrief),
         'BusinessAnalysis.brandBrief.primaryServices+secondaryServices',
       );
+    // Optional — only ever resolved for the Gallery-classified card-grid
+    // instance, and only when real photos exist; every other card-grid
+    // (Services, etc.) and a photo-less Gallery both correctly resolve to
+    // null (unresolved, not fabricated) and render text-only, unaffected.
+    case 'card-grid.images':
+      return context.componentId === GALLERY_COMPONENT_ID &&
+        business.photos &&
+        business.photos.length > 0
+        ? sourcedImageRefList(business.photos, 'Business.photos')
+        : null;
     case 'card-grid.sectionTitle':
     case 'menu-list.sectionTitle':
     case 'profile-grid.sectionTitle':

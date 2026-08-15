@@ -67,12 +67,23 @@ export const sourcedImageRefSchema = z.object({
 });
 export type SourcedImageRef = z.infer<typeof sourcedImageRefSchema>;
 
+// A list variant of sourcedImageRefSchema — real Business.photos entries
+// only (never AI-generated/stock imagery), for components that render a
+// photo grid (e.g. a Gallery-classified card-grid) rather than a single
+// image slot.
+export const sourcedImageRefListSchema = z.object({
+  value: z.array(z.object({ photoReference: z.string().min(1) })),
+  source: z.string().min(1),
+});
+export type SourcedImageRefList = z.infer<typeof sourcedImageRefListSchema>;
+
 export const contentValueSchema = z.union([
   sourcedTextSchema,
   sourcedTextListSchema,
   sourcedLinkSchema,
   sourcedLinkListSchema,
   sourcedImageRefSchema,
+  sourcedImageRefListSchema,
 ]);
 export type ContentValue = z.infer<typeof contentValueSchema>;
 

@@ -79,6 +79,8 @@ describe('assembleWebsite', () => {
       '--color-background',
       '--color-text',
       '--color-border',
+      '--color-primary-hover',
+      '--color-accent-hover',
       '--font-heading',
       '--font-body',
       '--radius-small',
@@ -91,6 +93,7 @@ describe('assembleWebsite', () => {
       '--spacing-lg',
       '--spacing-xl',
       '--shadow-value',
+      '--shadow-hover-value',
       '--min-touch-target',
     ]) {
       expect(css).toContain(prop);

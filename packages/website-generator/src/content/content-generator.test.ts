@@ -110,6 +110,45 @@ describe('generateContentManifest', () => {
     });
   });
 
+  it('binds gallery-grid images from real Business.photos, never the menu-showcase card-grid', () => {
+    const brandBrief = fakeBrandBrief();
+    const business = fakeBusinessContactInfo({
+      photos: [{ photoReference: 'photo-ref-1' }, { photoReference: 'photo-ref-2' }],
+    });
+    const theme = fakeThemeConfiguration();
+    const layout = fakeLayoutConfiguration(brandBrief, theme);
+    const manifest = fakeComponentManifest(brandBrief, theme, layout);
+    const result = generateContentManifest(brandBrief, business, theme, layout, manifest);
+
+    const gallery = result.componentContent.find((c) => c.componentId === 'gallery-grid');
+    expect(gallery?.fields.find((f) => f.slotName === 'images')?.value).toEqual({
+      value: [{ photoReference: 'photo-ref-1' }, { photoReference: 'photo-ref-2' }],
+      source: 'Business.photos',
+    });
+
+    const menu = result.componentContent.find((c) => c.componentId === 'menu-showcase');
+    expect(menu?.fields.some((f) => f.slotName === 'images')).toBe(false);
+  });
+
+  it('leaves gallery-grid images unresolved (not fabricated) when the business has no real photos', () => {
+    const brandBrief = fakeBrandBrief();
+    const business = fakeBusinessContactInfo({ photos: [] });
+    const theme = fakeThemeConfiguration();
+    const layout = fakeLayoutConfiguration(brandBrief, theme);
+    const manifest = fakeComponentManifest(brandBrief, theme, layout);
+    const result = generateContentManifest(brandBrief, business, theme, layout, manifest);
+
+    const gallery = result.componentContent.find((c) => c.componentId === 'gallery-grid');
+    expect(gallery?.fields.some((f) => f.slotName === 'images')).toBe(false);
+    expect(
+      result.unresolvedBindings.some(
+        (u) => u.componentId === 'gallery-grid' && u.slotName === 'images',
+      ),
+    ).toBe(true);
+    // items (text fallback) still resolves normally either way.
+    expect(gallery?.fields.some((f) => f.slotName === 'items')).toBe(true);
+  });
+
   it('binds testimonial-carousel items from socialProofSuggestions (founder-approved fork)', () => {
     const brandBrief = fakeBrandBrief({
       socialProofSuggestions: ['200+ five-star reviews', 'Voted best in the city'],

@@ -12,8 +12,10 @@ const config: Config = {
     extend: {
       colors: {
         primary: 'var(--color-primary)',
+        'primary-hover': 'var(--color-primary-hover)',
         secondary: 'var(--color-secondary)',
         accent: 'var(--color-accent)',
+        'accent-hover': 'var(--color-accent-hover)',
         background: 'var(--color-background)',
         foreground: 'var(--color-text)',
         border: 'var(--color-border)',
@@ -37,6 +39,11 @@ const config: Config = {
       },
       boxShadow: {
         token: 'var(--shadow-value)',
+        'token-hover': 'var(--shadow-hover-value)',
+      },
+      backgroundImage: {
+        'primary-accent-gradient':
+          'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
       },
       keyframes: {
         'accordion-down': {
