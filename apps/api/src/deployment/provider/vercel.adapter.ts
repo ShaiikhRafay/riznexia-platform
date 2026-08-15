@@ -74,7 +74,15 @@ export class VercelAdapter {
       target: params.target,
       files: params.files.map((file) => ({ file: file.path, data: file.content })),
     };
-    const raw = await this.request<RawVercelDeployment>('POST', '/v13/deployments', body);
+    // Vercel now rejects a first-ever deployment for a not-yet-existing
+    // project unless the request either includes a full `projectSettings`
+    // object or explicitly opts into automatic framework detection via this
+    // query param — undocumented in the version this adapter was originally
+    // written against, only discovered against the real API (unit tests
+    // mock `fetch` itself, so this was never exercised for real).
+    const raw = await this.request<RawVercelDeployment>('POST', '/v13/deployments', body, {
+      skipAutoDetectionConfirmation: '1',
+    });
     return toDeploymentResponse(raw);
   }
 
@@ -96,14 +104,24 @@ export class VercelAdapter {
     return { name: raw.name, verified: raw.verified, verification: raw.verification ?? [] };
   }
 
-  private async request<T>(method: 'GET' | 'POST', path: string, body: unknown): Promise<T> {
+  private async request<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    body: unknown,
+    extraQuery?: Record<string, string>,
+  ): Promise<T> {
     const apiToken = this.config.get<string>('VERCEL_API_TOKEN');
     if (!apiToken) {
       throw new UpstreamProviderException('Vercel', 'API token not configured');
     }
     const teamId = this.config.get<string>('VERCEL_TEAM_ID');
-    const url = teamId
-      ? `${VERCEL_API_BASE}${path}?teamId=${encodeURIComponent(teamId)}`
+    const query = new URLSearchParams(extraQuery);
+    if (teamId) {
+      query.set('teamId', teamId);
+    }
+    const queryString = query.toString();
+    const url = queryString
+      ? `${VERCEL_API_BASE}${path}?${queryString}`
       : `${VERCEL_API_BASE}${path}`;
 
     let response: Response;
