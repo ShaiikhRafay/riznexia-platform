@@ -30,13 +30,21 @@ export interface SourcedLinkList {
   source: string;
 }
 
+// Exactly one of photoReference (a real Business photo) or url (this
+// theme's curated stock placeholder, used only when the business has no
+// real photos) is ever set — see lib/image-utils.ts's resolveImageUrl().
+export interface ImageRefValue {
+  photoReference?: string;
+  url?: string;
+}
+
 export interface SourcedImageRef {
-  value: { photoReference: string };
+  value: ImageRefValue;
   source: string;
 }
 
 export interface SourcedImageRefList {
-  value: { photoReference: string }[];
+  value: ImageRefValue[];
   source: string;
 }
 

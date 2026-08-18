@@ -59,20 +59,33 @@ export const sourcedLinkListSchema = z.object({
 });
 export type SourcedLinkList = z.infer<typeof sourcedLinkListSchema>;
 
-// A reference only — the opaque provider photo token, never fetched or
-// generated image bytes.
+// A reference to an image — either a real Business.photos entry (the
+// opaque provider photo token, never fetched or generated image bytes at
+// this layer) or a direct `url` to a curated placeholder/stock image, used
+// only when the business has no real photos of its own (founder's
+// explicit "placeholder now, real client photos later" instruction —
+// never presented as if it were the business's own photo; `source`
+// always says which it is). Exactly one of the two must be present.
+export const imageRefValueSchema = z
+  .object({
+    photoReference: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
+  })
+  .refine((value) => Boolean(value.photoReference) !== Boolean(value.url), {
+    message: 'Exactly one of photoReference or url must be set',
+  });
+
 export const sourcedImageRefSchema = z.object({
-  value: z.object({ photoReference: z.string().min(1) }),
+  value: imageRefValueSchema,
   source: z.string().min(1),
 });
 export type SourcedImageRef = z.infer<typeof sourcedImageRefSchema>;
 
-// A list variant of sourcedImageRefSchema — real Business.photos entries
-// only (never AI-generated/stock imagery), for components that render a
+// A list variant of sourcedImageRefSchema, for components that render a
 // photo grid (e.g. a Gallery-classified card-grid) rather than a single
 // image slot.
 export const sourcedImageRefListSchema = z.object({
-  value: z.array(z.object({ photoReference: z.string().min(1) })),
+  value: z.array(imageRefValueSchema),
   source: z.string().min(1),
 });
 export type SourcedImageRefList = z.infer<typeof sourcedImageRefListSchema>;

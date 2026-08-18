@@ -6,6 +6,7 @@ import type {
   ContentValue,
   SupportedComponentType,
 } from '@riznexia/shared-types';
+import { stockPhotoForTheme } from './stock-photos';
 
 export interface ContentBindingContext {
   brandBrief: BusinessAnalysisOutput;
@@ -16,6 +17,8 @@ export interface ContentBindingContext {
   contactSectionComponentId: string | null;
   /** The component's own componentId — the original theme-authored id (e.g. 'gallery-grid'), which survives componentType generalization (component-generator.ts) unchanged. Used only to distinguish otherwise-identically-typed components (a Gallery card-grid from a Services card-grid), never for business-authored content. */
   componentId: string;
+  /** ThemeConfiguration.themeName — used only to look up this theme's curated stock-photo placeholder when the business has no real photos of its own (founder's explicit "placeholder now, real client photos later" instruction). */
+  themeName: string;
 }
 
 export interface UnresolvedSlot {
@@ -44,11 +47,33 @@ function sourcedLink(
 function sourcedImageRef(photoReference: string, source: string): ContentValue {
   return { value: { photoReference }, source };
 }
+function sourcedStockImageRef(url: string, source: string): ContentValue {
+  return { value: { url }, source };
+}
 function sourcedImageRefList(
   photoReferences: { photoReference: string }[],
   source: string,
 ): ContentValue {
   return { value: photoReferences, source };
+}
+
+/**
+ * The single real business photo when one exists; otherwise this theme's
+ * curated stock placeholder (clearly labeled 'ThemeStockPhoto.<themeName>'
+ * in `source`, never claimed to be the business's own); otherwise null
+ * (no theme match — should not happen for any of the 8 real themes, but
+ * never fabricated if it did). Shared by hero.backgroundImage and
+ * info-panel.image, the two single-image slots.
+ */
+function resolveImageOrStockPhoto(
+  context: ContentBindingContext,
+  businessSource: string,
+): ContentValue | null {
+  if (context.business.photos?.[0]) {
+    return sourcedImageRef(context.business.photos[0].photoReference, businessSource);
+  }
+  const stockUrl = stockPhotoForTheme(context.themeName);
+  return stockUrl ? sourcedStockImageRef(stockUrl, `ThemeStockPhoto.${context.themeName}`) : null;
 }
 
 // The one theme-authored componentId (packages/themes's own componentSet
@@ -99,9 +124,7 @@ function resolveSlotValue(
     case 'hero.subheadline':
       return sourcedText(brandBrief.businessSummary, 'BusinessAnalysis.brandBrief.businessSummary');
     case 'hero.backgroundImage':
-      return business.photos?.[0]
-        ? sourcedImageRef(business.photos[0].photoReference, 'Business.photos[0]')
-        : null;
+      return resolveImageOrStockPhoto(context, 'Business.photos[0]');
     case 'hero.trustSignal':
       return brandBrief.trustSignals[0]
         ? sourcedText(brandBrief.trustSignals[0], 'BusinessAnalysis.brandBrief.trustSignals[0]')
@@ -134,15 +157,25 @@ function resolveSlotValue(
         'BusinessAnalysis.brandBrief.primaryServices+secondaryServices',
       );
     // Optional — only ever resolved for the Gallery-classified card-grid
-    // instance, and only when real photos exist; every other card-grid
-    // (Services, etc.) and a photo-less Gallery both correctly resolve to
-    // null (unresolved, not fabricated) and render text-only, unaffected.
-    case 'card-grid.images':
-      return context.componentId === GALLERY_COMPONENT_ID &&
-        business.photos &&
-        business.photos.length > 0
-        ? sourcedImageRefList(business.photos, 'Business.photos')
+    // instance; every other card-grid (Services, etc.) always resolves to
+    // null (unresolved, not fabricated) and renders text-only, unaffected.
+    // Real Business.photos when they exist; otherwise this theme's single
+    // curated stock placeholder (clearly labeled, never claimed to be the
+    // business's own) so the Gallery still shows *something* rather than
+    // a bare card grid — founder's explicit "placeholder now, real client
+    // photos later" instruction.
+    case 'card-grid.images': {
+      if (context.componentId !== GALLERY_COMPONENT_ID) {
+        return null;
+      }
+      if (business.photos && business.photos.length > 0) {
+        return sourcedImageRefList(business.photos, 'Business.photos');
+      }
+      const stockUrl = stockPhotoForTheme(context.themeName);
+      return stockUrl
+        ? { value: [{ url: stockUrl }], source: `ThemeStockPhoto.${context.themeName}` }
         : null;
+    }
     case 'card-grid.sectionTitle':
     case 'menu-list.sectionTitle':
     case 'profile-grid.sectionTitle':
@@ -168,9 +201,7 @@ function resolveSlotValue(
     case 'info-panel.heading':
       return sourcedText(titleCase(sectionId), 'LayoutConfiguration.pageStructure[].sectionId');
     case 'info-panel.image':
-      return business.photos?.[0]
-        ? sourcedImageRef(business.photos[0].photoReference, 'Business.photos[0]')
-        : null;
+      return resolveImageOrStockPhoto(context, 'Business.photos[0]');
 
     case 'map-embed.address':
       return sourcedText(`${business.address}, ${business.city}`, 'Business.address+Business.city');

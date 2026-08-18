@@ -30,11 +30,11 @@ export interface ContentManifestContent {
  * layoutConfiguration, componentManifest) tuple always produces a
  * structurally identical ContentManifestContent. No AI call, no prompt
  * execution, no LLM provider, no content regeneration — every bound value
- * is either a verbatim upstream field, a real array element, or a fixed
- * non-creative template over real fields (metaTitle). `themeConfiguration`
- * is accepted per the phase brief's stated input list but not deeply
- * exercised by this version's binding rules — nothing here currently
- * varies by theme style, only by real business data and layout structure.
+ * is either a verbatim upstream field, a real array element, a fixed
+ * non-creative template over real fields (metaTitle), or — image slots
+ * only, and only when the business has no real photos of its own —
+ * `themeConfiguration.themeName`'s one curated stock placeholder
+ * (stock-photos.ts, clearly labeled as such in every field's `source`).
  *
  * Binds only the content slots M8.2's ComponentManifest already declared
  * (requiredContent/optionalContent) — never invents a new slot. A slot
@@ -44,7 +44,7 @@ export interface ContentManifestContent {
 export function generateContentManifest(
   brandBrief: BusinessAnalysisOutput,
   business: BusinessContactInfo,
-  _themeConfiguration: ThemeConfiguration,
+  themeConfiguration: ThemeConfiguration,
   layoutConfiguration: LayoutConfiguration,
   componentManifest: ComponentManifest,
 ): ContentManifestContent {
@@ -74,6 +74,7 @@ export function generateContentManifest(
         sectionId,
         contactSectionComponentId,
         componentId: component.componentId,
+        themeName: themeConfiguration.themeName,
       },
       navigationItems,
     );

@@ -14,3 +14,25 @@ export function resolvePlacePhotoUrl(photoReference: string, maxWidthPx = 1200):
   }
   return `https://places.googleapis.com/v1/${photoReference}/media?maxWidthPx=${maxWidthPx}&key=${apiKey}`;
 }
+
+// A single entry point every section component's image slot goes through —
+// resolves either shape an ImageRefValue can carry: a direct `url` (this
+// theme's curated stock placeholder, ready to use as-is) or a real
+// Business `photoReference` (resolved via the function above). Never both
+// set at once (content-binding-rules.ts's own contract); `url` is checked
+// first only because it needs no further resolution.
+export function resolveImageUrl(
+  ref: { photoReference?: string; url?: string } | undefined,
+  maxWidthPx = 1200,
+): string | null {
+  if (!ref) {
+    return null;
+  }
+  if (ref.url) {
+    return ref.url;
+  }
+  if (ref.photoReference) {
+    return resolvePlacePhotoUrl(ref.photoReference, maxWidthPx);
+  }
+  return null;
+}

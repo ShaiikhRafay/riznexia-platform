@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { resolvePlacePhotoUrl } from '@/lib/image-utils';
+import { resolveImageUrl } from '@/lib/image-utils';
 import type { SourcedImageRef, SourcedText } from '@/lib/types';
 
 export interface InfoPanelProps {
@@ -9,7 +9,7 @@ export interface InfoPanelProps {
 }
 
 export function InfoPanel({ heading, body, image }: InfoPanelProps) {
-  const imageUrl = image ? resolvePlacePhotoUrl(image.value.photoReference) : null;
+  const imageUrl = resolveImageUrl(image?.value);
 
   return (
     <div

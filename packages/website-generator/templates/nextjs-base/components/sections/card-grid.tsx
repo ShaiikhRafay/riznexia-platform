@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { gridColumnsClassName } from '@/lib/grid-columns';
-import { resolvePlacePhotoUrl } from '@/lib/image-utils';
+import { resolveImageUrl } from '@/lib/image-utils';
 import type { SourcedImageRefList, SourcedText, SourcedTextList } from '@/lib/types';
 
 export interface CardGridProps {
@@ -21,7 +21,14 @@ export interface CardGridProps {
 export function CardGrid({ sectionTitle, items, images, columns }: CardGridProps) {
   const reduceMotion = useReducedMotion();
   const gridClass = gridColumnsClassName(columns);
-  const photoUrls = images?.value.map((photo) => resolvePlacePhotoUrl(photo.photoReference)) ?? [];
+  // Cycles (not just indexes) through the resolved photo list — real
+  // Business.photos usually cover every card 1:1, but the stock-photo
+  // fallback (content-binding-rules.ts) is only ever a single curated
+  // image per theme; cycling it across every card keeps the grid visually
+  // consistent instead of only the first card having an image.
+  const photoUrls = (images?.value.map((photo) => resolveImageUrl(photo)) ?? []).filter(
+    (url): url is string => Boolean(url),
+  );
 
   return (
     <div className="gap-token-md flex flex-col">
@@ -30,7 +37,7 @@ export function CardGrid({ sectionTitle, items, images, columns }: CardGridProps
       )}
       <ul className={gridClass}>
         {items.value.map((item, index) => {
-          const photoUrl = photoUrls[index] ?? null;
+          const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null;
           return (
             <motion.li
               key={item}

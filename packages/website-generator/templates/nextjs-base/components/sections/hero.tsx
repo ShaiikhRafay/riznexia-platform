@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { resolvePlacePhotoUrl } from '@/lib/image-utils';
+import { resolveImageUrl } from '@/lib/image-utils';
 import type { CtaStyle, SourcedImageRef, SourcedLink, SourcedText } from '@/lib/types';
 
 export interface HeroProps {
@@ -36,9 +36,7 @@ export function Hero({
   ctaStyle,
 }: HeroProps) {
   const reduceMotion = useReducedMotion();
-  const imageUrl = backgroundImage
-    ? resolvePlacePhotoUrl(backgroundImage.value.photoReference)
-    : null;
+  const imageUrl = resolveImageUrl(backgroundImage?.value);
   const isBackgroundMedia = mediaPosition === 'background' && imageUrl;
   // No real photo to show (either this business has none, or the
   // deployment's photo key isn't configured) — a flat solid background

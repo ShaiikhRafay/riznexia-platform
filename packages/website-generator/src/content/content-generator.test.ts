@@ -83,6 +83,21 @@ describe('generateContentManifest', () => {
     });
   });
 
+  it('falls back to the theme stock photo for hero.backgroundImage when the business has no real photos', () => {
+    const brandBrief = fakeBrandBrief();
+    const business = fakeBusinessContactInfo({ photos: [] });
+    const theme = fakeThemeConfiguration({ themeName: 'Restaurant' });
+    const layout = fakeLayoutConfiguration(brandBrief, theme);
+    const manifest = fakeComponentManifest(brandBrief, theme, layout);
+    const result = generateContentManifest(brandBrief, business, theme, layout, manifest);
+
+    const hero = result.componentContent.find((c) => c.componentId === 'hero-banner');
+    expect(hero?.fields.find((f) => f.slotName === 'backgroundImage')?.value).toEqual({
+      value: { url: expect.stringMatching(/^https:\/\/images\.unsplash\.com\/photo-/) },
+      source: 'ThemeStockPhoto.Restaurant',
+    });
+  });
+
   it('binds card-grid/menu-list items from primaryServices+secondaryServices', () => {
     const brandBrief = fakeBrandBrief({
       primaryServices: ['Dine-in'],
@@ -130,21 +145,25 @@ describe('generateContentManifest', () => {
     expect(menu?.fields.some((f) => f.slotName === 'images')).toBe(false);
   });
 
-  it('leaves gallery-grid images unresolved (not fabricated) when the business has no real photos', () => {
+  it("falls back to the theme's curated stock photo (clearly labeled, never fabricated as real) when the business has no real photos", () => {
     const brandBrief = fakeBrandBrief();
     const business = fakeBusinessContactInfo({ photos: [] });
-    const theme = fakeThemeConfiguration();
+    const theme = fakeThemeConfiguration({ themeName: 'Restaurant' });
     const layout = fakeLayoutConfiguration(brandBrief, theme);
     const manifest = fakeComponentManifest(brandBrief, theme, layout);
     const result = generateContentManifest(brandBrief, business, theme, layout, manifest);
 
     const gallery = result.componentContent.find((c) => c.componentId === 'gallery-grid');
-    expect(gallery?.fields.some((f) => f.slotName === 'images')).toBe(false);
+    const imagesField = gallery?.fields.find((f) => f.slotName === 'images');
+    expect(imagesField?.value).toEqual({
+      value: [{ url: expect.stringMatching(/^https:\/\/images\.unsplash\.com\/photo-/) }],
+      source: 'ThemeStockPhoto.Restaurant',
+    });
     expect(
       result.unresolvedBindings.some(
         (u) => u.componentId === 'gallery-grid' && u.slotName === 'images',
       ),
-    ).toBe(true);
+    ).toBe(false);
     // items (text fallback) still resolves normally either way.
     expect(gallery?.fields.some((f) => f.slotName === 'items')).toBe(true);
   });
