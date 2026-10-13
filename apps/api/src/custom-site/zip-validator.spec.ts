@@ -44,6 +44,13 @@ describe('validateSite', () => {
     expect(v.files.map((f) => f.path).sort()).toEqual(['app/page.tsx', 'package.json']);
     expect(v.warnings).toEqual([]);
   });
+  it('ignores extensionless dotfiles like .gitignore instead of rejecting them', () => {
+    const v = validateSite(
+      readZip(createZip([...good(), { path: 'site/.gitignore', data: Buffer.from('.next\n') }])),
+    );
+    expect(v.ok).toBe(true);
+    expect(v.files.map((f) => f.path)).not.toContain('.gitignore');
+  });
   it('rejects binary, env, missing package.json, secrets', () => {
     const v = validateSite([
       { path: 'app/page.tsx', data: Buffer.from('const k="sk-abcdefghijklmnopqrstuvwxyz"') },

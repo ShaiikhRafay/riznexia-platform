@@ -42,6 +42,12 @@ const SKIP_PREFIXES = ['node_modules/', '.next/', '.git/', '.vercel/', '__MACOSX
 const SKIP_NAMES = new Set([
   '.DS_Store',
   'Thumbs.db',
+  // Repo/editor housekeeping with no extension — never needed to build on Vercel.
+  '.gitignore',
+  '.gitattributes',
+  '.prettierignore',
+  '.eslintignore',
+  '.editorconfig',
   'package-lock.json',
   'pnpm-lock.yaml',
   'yarn.lock',
