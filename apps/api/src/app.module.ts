@@ -10,6 +10,8 @@ import { CostModule } from './common/cost/cost.module';
 import { DatabaseModule } from './common/database/database.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { RbacModule } from './common/rbac/rbac.module';
+import { BriefModule } from './brief-engine/brief.module';
+import { CustomSiteModule } from './custom-site/custom-site.module';
 import { BusinessAnalysisModule } from './business-analysis/business-analysis.module';
 import { ComponentEngineModule } from './component-engine/component-engine.module';
 import { ContentEngineModule } from './content-engine/content-engine.module';
@@ -61,6 +63,8 @@ import { WebsitePreviewModule } from './website-preview/website-preview.module';
     ComponentEngineModule,
     ContentEngineModule,
     WebsiteAssemblyModule,
+    BriefModule,
+    CustomSiteModule,
     WebsitePreviewModule,
     PipelineModule,
     TaskModule,

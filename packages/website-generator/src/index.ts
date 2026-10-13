@@ -21,3 +21,10 @@ export * from './assembly/package-json-generator';
 export * from './assembly/static-template-loader';
 export * from './assembly/website-assembler';
 export * from './assembly/website-validator';
+// BRIEF.md hand-off (docs/36-brief-handoff.md) — selective exports so the
+// brief module's small helpers (slugify, whatsappLink, ...) never collide
+// with the generic names used elsewhere in this package.
+export { BRIEF_ENGINE_VERSION, generateBrief } from './brief/brief-generator';
+export type { BriefInput, GeneratedBrief } from './brief/brief-generator';
+export { DESIGN_DIRECTIONS, designDirectionFor } from './brief/design-directions';
+export type { DesignDirection, SignatureSection } from './brief/design-directions';

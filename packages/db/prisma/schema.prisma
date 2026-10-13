@@ -481,6 +481,8 @@ model Business {
   // Module M11 (DECISIONS.md D-092) — FK'd here, not to the legacy
   // `Website` model.
   websiteDeployments      WebsiteDeployment[]
+  customSites             CustomSite[]
+  customSiteDeployments   CustomSiteDeployment[]
   domains                 Domain[]
 
   @@index([deletedAt])
@@ -1717,3 +1719,48 @@ model AnalyticsEvent {
 //
 //   @@map("demo_feedback")
 // }
+
+// Claude-Code-built sites uploaded as site.zip (BRIEF.md hand-off flow).
+// Separate from GeneratedWebsite/WebsiteDeployment, whose FKs and M9
+// validation assume the rule-based generator. `files` is the validated
+// text-file set [{path, content}] that is sent to Vercel as-is.
+model CustomSite {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  version     Int
+  files       Json
+  fileCount   Int      @map("file_count")
+  totalBytes  Int      @map("total_bytes")
+  contentHash String   @map("content_hash")
+  warnings    Json     @default("[]")
+  createdById String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  deployments CustomSiteDeployment[]
+
+  @@unique([businessId, version])
+  @@index([businessId, createdAt])
+  @@map("custom_sites")
+}
+
+model CustomSiteDeployment {
+  id                   String     @id @default(uuid())
+  businessId           String     @map("business_id")
+  business             Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customSiteId         String     @map("custom_site_id")
+  customSite           CustomSite @relation(fields: [customSiteId], references: [id], onDelete: Cascade)
+  // in_progress | completed | failed
+  status               String
+  providerDeploymentId String?    @map("provider_deployment_id")
+  liveUrl              String?    @map("live_url")
+  errorMessage         String?    @map("error_message")
+  engineVersion        String     @map("engine_version")
+  createdById          String?    @map("created_by")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  completedAt          DateTime?  @map("completed_at")
+
+  @@index([businessId, createdAt])
+  @@index([customSiteId])
+  @@map("custom_site_deployments")
+}

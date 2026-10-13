@@ -1,0 +1,55 @@
+# Site builder rules (Riznexia demo sites)
+
+You are building a **demo website for one local business** from a `BRIEF.md` produced by the Riznexia AI Sales Platform. A sales rep will send the live link to the business owner, so the site must look like it was designed by a good agency, not assembled from a template.
+
+## Inputs
+
+- `BRIEF.md` (same folder as this file) is the single source of truth. Read all of it before writing code.
+- Output goes in `./site/` (create it). It must be a standalone Next.js project: `./site/package.json`, `./site/app/page.tsx`, etc. Do not touch anything outside `./site/` except `package-site.sh` output.
+- There is no starter repo: scaffold yourself (Tailwind config, CSS-variable theme tokens, UI parts).
+- **Text files only.** The platform deploys the source to Vercel as text, so: no PNG/JPG/WEBP/fonts/video files in the project. Images are remote URLs (Unsplash/Pexels, listed in the brief's imagery plan) via `<img>`/`next/image` with `images.remotePatterns` in `next.config`, or inline SVG. Fonts via `next/font/google`.
+- No `.env` files and no API keys anywhere in the code.
+
+## Stack
+
+- Next.js 15 (App Router) + TypeScript + Tailwind CSS + Framer Motion (or CSS scroll/animation where simpler) + `lucide-react` icons.
+- Fonts via `next/font/google`. Images via `next/image`.
+- No backend. Forms fall back to `mailto:` / WhatsApp `wa.me` links.
+- All business content and every sample item live in one file, `data/site.ts`, so a rep can change it in minutes.
+
+## Design bar (the whole point)
+
+1. **Follow the Design Direction in the brief** (section 5). It names the hero pattern, signature sections, motion and conversion mechanics. Implement them; do not simplify to "hero + cards + footer".
+2. **First screen sells.** Within one mobile screen: business name, what it is, a strong visual, primary CTA, tap-to-call/WhatsApp.
+3. **Photography carries the page.** Large, consistent crops, rounded corners matching the card radius, no tiny thumbnails.
+4. **Typographic contrast.** One oversized display moment per section (a number, a word, a headline), small supporting text, a clear scale.
+5. **Colour discipline.** Use the five brand colours plus tints made with `color-mix()`. One deep "band" colour for contrast sections. Never add unrelated hues.
+6. **Motion with purpose.** Stagger the hero in, reveal sections once on scroll, lift cards on hover. Always honour `prefers-reduced-motion`. Nothing blocks reading or tapping.
+7. **Conversion everywhere.** Primary CTA in hero, mid-page and footer; floating WhatsApp button; sticky call/book bar on mobile.
+8. **Mobile first.** Design at 390px, then enlarge. 44-48px tap targets. No horizontal scroll.
+9. **Real over generic copy.** Use the USPs, services and city from the brief. Short sentences. No filler such as "welcome to our website", "synergy", "world-class".
+
+## Honesty rules (non-negotiable)
+
+- Never invent phone numbers, addresses, hours, awards, years in business, staff names, certifications, customer counts or review quotes presented as real.
+- Anything not in the brief is either omitted or **sample content**: mark it with a `// SAMPLE` comment and keep it replaceable in `data/site.ts`. Sample prices are labelled "sample" or omitted.
+- Every non-business image is a freely licensed placeholder (Unsplash/Pexels) with a `// PLACEHOLDER` comment and meaningful `alt`. Never imply a stock photo is the business's own.
+- Do not copy another brand's logo, copy, photos or artwork. Take inspiration from patterns only.
+- Include a small footer credit: "Demo website prepared by Riznexia".
+
+## Workflow
+
+1. Read the brief; list the sections, tokens and gaps back to yourself in a short plan.
+2. Scaffold, set up tokens/fonts, build `data/site.ts` first, then sections top to bottom.
+3. Run the dev server, then verify with real screenshots at 390 / 768 / 1440px (Playwright: `npx playwright install chromium` if needed). Look at them; fix overlaps, cut-off text, weak contrast, empty-looking sections.
+4. Run the production build and fix all type/lint errors.
+5. Run Lighthouse on mobile (`npx lighthouse http://localhost:3000 --form-factor=mobile --only-categories=performance,accessibility,best-practices,seo`). Targets: Performance 90+, Accessibility 95+, Best Practices 95+, SEO 95+.
+6. Walk through the acceptance checklist at the end of the brief. Do not say "done" until every box is true.
+7. Write `./site/README.md`: how to run and how to edit `data/site.ts`.
+8. Package: run `bash package-site.sh` (creates `site.zip`, excluding node_modules/.next). Tell the operator to upload `site.zip` in the portal.
+
+## Do not
+
+- Deploy anything or log in to Vercel. Deployment is handled by the portal after the operator uploads `site.zip`.
+- Add analytics, tracking, cookies banners or third-party scripts beyond Google Fonts and the map embed.
+- Leave `console.log`, unused files, lorem ipsum, or broken image links.

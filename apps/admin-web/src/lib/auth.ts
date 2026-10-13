@@ -72,6 +72,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '/website-preview',
     requiredPermission: 'website:preview',
   },
+  // Outreach: contact info, Build Pack, site.zip upload + Vercel deploy, EN/Roman Urdu proposals.
+  {
+    id: 'outreach',
+    label: 'Outreach & Proposals',
+    href: '/outreach',
+    requiredPermission: 'leads:read',
+  },
   { id: 'crm', label: 'Sales CRM', href: '/crm', requiredPermission: 'crm:view' },
   // F11 (Deployment) — gated on its own dedicated `deployment:view`, same
   // shape as `crm:view`/`analytics:view` (a real, named module-level
