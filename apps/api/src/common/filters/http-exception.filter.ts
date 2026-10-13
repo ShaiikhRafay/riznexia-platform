@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { AppException } from '../exceptions/app.exception';
 
@@ -9,6 +16,8 @@ import { AppException } from '../exceptions/app.exception';
 // best-effort mapping so the response shape is never inconsistent.
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -29,6 +38,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       });
       return;
     }
+
+    // Unknown errors are the only ones nobody else logs — without this a 500
+    // leaves no trace in the server logs at all.
+    this.logger.error(
+      exception instanceof Error ? (exception.stack ?? exception.message) : String(exception),
+    );
 
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred', details: {} },
