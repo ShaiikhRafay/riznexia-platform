@@ -50,3 +50,7 @@ jobs:
 
       - name: Build
         run: pnpm turbo run build
+        env:
+          # admin-web validates this at build time; any valid URL works for CI
+          # (the real value is set in Vercel).
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
