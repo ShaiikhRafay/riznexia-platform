@@ -51,6 +51,15 @@ describe('validateSite', () => {
     expect(v.ok).toBe(true);
     expect(v.files.map((f) => f.path)).not.toContain('.gitignore');
   });
+  it('ignores tsc build caches (*.tsbuildinfo)', () => {
+    const v = validateSite(
+      readZip(
+        createZip([...good(), { path: 'site/tsconfig.tsbuildinfo', data: Buffer.from('{}') }]),
+      ),
+    );
+    expect(v.ok).toBe(true);
+    expect(v.files.map((f) => f.path)).not.toContain('tsconfig.tsbuildinfo');
+  });
   it('rejects binary, env, missing package.json, secrets', () => {
     const v = validateSite([
       { path: 'app/page.tsx', data: Buffer.from('const k="sk-abcdefghijklmnopqrstuvwxyz"') },

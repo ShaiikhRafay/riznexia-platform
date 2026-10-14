@@ -9,7 +9,7 @@ if [ ! -f site/package.json ]; then echo "ERROR: site/package.json not found. Bu
 rm -f site.zip
 zip -rq site.zip site \\
   -x "site/node_modules/*" "site/.next/*" "site/.git/*" "site/.vercel/*" "site/out/*" \\
-     "site/.env*" "*/.DS_Store" "site/package-lock.json" "site/pnpm-lock.yaml" "site/yarn.lock"
+     "site/.env*" "*/.DS_Store" "*.tsbuildinfo" "site/package-lock.json" "site/pnpm-lock.yaml" "site/yarn.lock"
 echo "Created site.zip ($(du -h site.zip | cut -f1)). Upload it in the portal: Outreach -> Upload site."
 `;
 

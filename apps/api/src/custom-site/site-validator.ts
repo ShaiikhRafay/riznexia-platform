@@ -79,7 +79,13 @@ export function validateSite(rawEntries: ZipEntry[]): SiteValidation {
   const entries = stripCommonRoot(rawEntries);
   for (const e of entries) {
     const base = e.path.split('/').pop() ?? '';
-    if (SKIP_NAMES.has(base) || SKIP_PREFIXES.some((s) => e.path.startsWith(s))) continue;
+    // `*.tsbuildinfo` is a TypeScript incremental-build cache left behind by `tsc`/`next build`.
+    if (
+      SKIP_NAMES.has(base) ||
+      base.endsWith('.tsbuildinfo') ||
+      SKIP_PREFIXES.some((s) => e.path.startsWith(s))
+    )
+      continue;
     if (!isSafeZipPath(e.path)) {
       errors.push(`Unsafe path: ${e.path}`);
       continue;
