@@ -28,11 +28,16 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
-          cache: "pnpm"
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Prisma client is generated code (not committed); without this the
+      # typecheck of packages/db and everything importing @prisma/client fails.
+      - name: Generate Prisma client
+        run: pnpm --filter @riznexia/db generate
 
       - name: Lint
         run: pnpm turbo run lint
